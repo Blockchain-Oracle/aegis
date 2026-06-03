@@ -115,8 +115,11 @@ stories:
     notes: "First EPIC-04 PR. Pivot to demo-critical path. Models locked; HTTP client in judges-02."
   - id: story-judges-02-ai-defense-httpx-client-with-retries
     epic: "EPIC-04 — Cisco AI Defense client"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-judges-01-ai-defense-request-response-models]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/80"
+    merged_at: "2026-06-03T14:45:00Z"
+    notes: "Mock-first (api_key constructor arg). Live mode env-toggle deferred to judges-04 from_env() factory."
   - id: story-judges-03-ai-defense-circuit-breaker-tenacity
     epic: "EPIC-04 — Cisco AI Defense client"
     status: PENDING
