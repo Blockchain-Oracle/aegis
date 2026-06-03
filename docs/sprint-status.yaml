@@ -20,8 +20,11 @@ stories:
     merged_at: "2026-06-03T09:00:00Z"
   - id: story-cicd-02-test-pipeline-pytest-respx
     epic: "EPIC-01 — CI/CD foundation"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-skel-01-uv-workspace-pyproject, story-cicd-01-build-pipeline-python-wheels]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/69"
+    merged_at: "2026-06-03T09:30:00Z"
+    notes: "Coverage gate becomes load-bearing the moment EPIC-03 lands non-trivial source. Plan tests-first."
   - id: story-cicd-03-loc-cap-enforcement
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
