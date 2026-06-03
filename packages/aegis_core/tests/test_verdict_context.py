@@ -50,6 +50,11 @@ def test_verdict_context_accepts_empty_recent_messages() -> None:
     assert ctx.recent_messages == []
 
 
+def test_verdict_context_extra_forbid_rejects_unknown_field() -> None:
+    with pytest.raises(ValidationError):
+        _ctx(unexpected_field="value")
+
+
 def test_verdict_context_json_schema_has_all_six_properties() -> None:
     schema = VerdictContext.model_json_schema()
     expected = {

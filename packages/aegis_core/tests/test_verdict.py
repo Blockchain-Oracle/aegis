@@ -189,3 +189,14 @@ def test_verdict_label_value_lowercases_for_otel() -> None:
 def test_verdict_returns_consistent_uuid_type() -> None:
     v = _make_verdict()
     assert isinstance(v.trace_id, UUID)
+
+
+def test_verdict_extra_forbid_rejects_unknown_field() -> None:
+    """extra="forbid" must reject typo'd / future-incompatible keys at the API boundary."""
+    with pytest.raises(ValidationError):
+        _make_verdict(unexpected_field="value")
+
+
+def test_rule_hit_extra_forbid_rejects_unknown_field() -> None:
+    with pytest.raises(ValidationError):
+        RuleHit(rule="x", confidence=0.5, source="ai_defense", extra_attr="nope")  # type: ignore[call-arg]
