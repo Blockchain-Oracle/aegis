@@ -23,8 +23,6 @@ from splunklib.ai.messages import AgentResponse
 from splunklib.ai.middleware import (
     AgentMiddleware,
     AgentRequest,
-    ModelRequest,
-    ModelResponse,
     SubagentRequest,
     SubagentResponse,
     ToolRequest,
@@ -150,16 +148,9 @@ async def test_tool_middleware_stub_delegates_to_handler() -> None:
     assert result is sentinel
 
 
-@pytest.mark.asyncio
-async def test_model_middleware_stub_delegates_to_handler() -> None:
-    instance = SafetyModelMiddleware(profile="default")
-    sentinel = object()
-
-    async def handler(_request: ModelRequest) -> ModelResponse:
-        return sentinel  # type: ignore[return-value]
-
-    result = await instance.model_middleware(object(), handler)  # type: ignore[arg-type]
-    assert result is sentinel
+# test_model_middleware_stub_delegates_to_handler removed: SafetyModelMiddleware
+# is no longer a pass-through stub (replaced by the real pre-inference scan in
+# story-mw-03). Behavioral coverage now lives in tests/test_model_middleware_pre.py.
 
 
 @pytest.mark.asyncio

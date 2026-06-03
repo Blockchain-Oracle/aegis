@@ -48,3 +48,17 @@ class NetworkError(AegisError):
     config-layer cause applies. Always chained via `raise ... from e`
     so the underlying httpx exception is preserved in __cause__.
     """
+
+
+class ModelInputBlockedByAegis(AegisError):  # noqa: N818 — name locked by story-mw-03 + architecture.md
+    """Raised by SafetyModelMiddleware when pre-inference scan returns BLOCK.
+
+    Carries the Verdict that caused the block so callers can inspect rules,
+    severity, and explanation. The model was NEVER invoked.
+    """
+
+    def __init__(self, verdict: object) -> None:
+        """Wrap the blocking verdict; message is built from verdict.explanation."""
+        message = f"Model input blocked by Aegis: {verdict!r}"
+        super().__init__(message)
+        self.verdict = verdict
