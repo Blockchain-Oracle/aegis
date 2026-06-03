@@ -21,6 +21,11 @@ paths = [
 # name AEGIS_AI_DEFENSE_API_KEY appears throughout docs/ as a placeholder
 # (not a value). Same for AEGIS_SPLUNK_HEC_TOKEN, AEGIS_SPLUNK_API_TOKEN.
 # These are NAMES, never set in source.
+#
+# IMPORTANT: gitleaks' `[allowlist].regexes` matches the DETECTED SECRET
+# VALUE, not the surrounding line. A real-shaped slack-token-shaped secret
+# co-located on a line containing AEGIS_AI_DEFENSE_API_KEY will STILL fire.
+# Verified empirically. Do not widen these regexes to match line content.
 regexes = [
   '''AEGIS_AI_DEFENSE_API_KEY''',
   '''AEGIS_SPLUNK_HEC_TOKEN''',
