@@ -65,8 +65,9 @@ When  `cat .python-version | tr -d '[:space:]'` runs
 Then  stdout is exactly "3.13"
 
 Given the LICENSE file is at repo root
-When  `head -1 LICENSE | grep -ciE '(apache license)'` runs
+When  `head -3 LICENSE | grep -ciE '(apache license)'` runs
 Then  stdout is "1"
+(Note: standard Apache-2.0 LICENSE template from apache.org starts with two blank lines before the "Apache License" header — check the first 3 lines, not just line 1.)
 
 Given the lockfile is committed
 When  `test -f uv.lock` runs
@@ -103,8 +104,8 @@ uv run pytest packages/aegis_core/tests/test_skeleton.py -q
 # 4. Python pin is exactly 3.13
 test "$(tr -d '[:space:]' < .python-version)" = "3.13" && echo "python-version ok"
 
-# 5. LICENSE is Apache-2.0
-head -1 LICENSE | grep -ciE 'apache license'
+# 5. LICENSE is Apache-2.0 (standard template has blank padding lines before header)
+head -3 LICENSE | grep -ciE 'apache license'
 
 # 6. Lockfile committed
 test -f uv.lock && echo "uv.lock present"
