@@ -100,8 +100,10 @@ stories:
     merged_at: "2026-06-03T12:15:00Z"
   - id: story-core-04-structlog-config-and-conventions
     epic: "EPIC-03 — Core domain types"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-skel-02-ruff-mypy-config]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/77"
+    merged_at: "2026-06-03T13:05:00Z"
 
   # EPIC-04 — Cisco AI Defense client
   - id: story-judges-01-ai-defense-request-response-models
