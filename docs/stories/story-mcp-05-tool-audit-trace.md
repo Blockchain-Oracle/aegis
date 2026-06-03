@@ -21,7 +21,7 @@
 Exact files the coding agent creates or modifies for this story:
 
 - `packages/aegis_core/src/aegis_core/audit_report.py` — NEW — `class AuditReport(BaseModel): trace_id: UUID; event_count: int; verdicts: list[Verdict]; first_seen: datetime; last_seen: datetime; surfaces_seen: list[str]; aggregate: dict` — shared type so Surface 4 dashboards can deserialize the same shape
-- `packages/aegis_mcp/src/aegis_mcp/tools/audit_trace.py` — NEW — MCP tool; `class AuditTraceInputs(BaseModel): trace_id: UUID; eval_dimensions: list[str] = ["verdict","severity","surface"]`; `async def audit_trace(args: AuditTraceInputs) -> AuditReport`; runs Splunk REST search via `aegis_judges.foundation_sec` (which already wraps Splunk REST search per EPIC-05); SPL: `search index=main sourcetype=cisco_ai_defense:aegis_verdict trace_id={trace_id} | stats count by {eval_dimensions}`; aggregates the rows into the `AuditReport` shape; `surface="mcp_audit"`; emits OTel evaluation event tagged with `aegis.audit.event_count`
+- `packages/aegis_mcp/src/aegis_mcp/tools/audit_trace.py` — NEW — MCP tool; `class AuditTraceInputs(BaseModel): trace_id: UUID; eval_dimensions: list[str] = ["verdict","severity","surface"]`; `async def audit_trace(args: AuditTraceInputs) -> AuditReport`; runs Splunk REST search via `aegis_judges.foundation_sec.SplunkSearchClient` (the REST search client built in EPIC-05 story-foundsec-01); SPL: `search index=main sourcetype=cisco_ai_defense:aegis_verdict trace_id={trace_id} | stats count by {eval_dimensions}`; aggregates the rows into the `AuditReport` shape; `surface="mcp_audit"`; emits OTel evaluation event tagged with `aegis.audit.event_count`
 - `packages/aegis_mcp/src/aegis_mcp/schemas.py` — UPDATE — export `AUDIT_REPORT_OUTPUT_SCHEMA = AuditReport.model_json_schema()` alongside `VERDICT_OUTPUT_SCHEMA`
 - `packages/aegis_mcp/src/aegis_mcp/server.py` — UPDATE — wire `audit_trace.register(server)` into bootstrap; this tool's `outputSchema` is `AUDIT_REPORT_OUTPUT_SCHEMA` (not the Verdict schema — audit is the one tool that returns an aggregate)
 - `packages/aegis_mcp/tests/test_tool_audit_trace.py` — NEW — ≥ 12 behavioral tests: tool discoverable via `tools/list`, `outputSchema` equals `AuditReport.model_json_schema()`, valid trace_id with 3 mocked Splunk-returned events → `event_count == 3` and `len(verdicts) == 3`, `surfaces_seen` matches the union of surfaces in returned events, `first_seen <= last_seen`, default eval_dimensions used when not provided, custom eval_dimensions=["severity"] passed through to SPL string verbatim, surface field of the wrapper event (OTel) == "mcp_audit", `aegis.audit.event_count` attribute set on emitted event, in-band `isError: true` on Splunk REST failure, empty-result trace_id returns `event_count == 0` with empty verdicts list (not isError), SPL injection attempt in eval_dimensions rejected with `AegisValidationError`
@@ -34,8 +34,8 @@ The coding agent must NOT modify files outside this map without re-checking `CLA
 
 ```
 Given the server is bootstrapped
-When  the MCP `tools/list` request is sent in-process
-Then  the response contains a tool named exactly "aegis_audit_trace"
+When  `list_tools_for_test()` (from `aegis_mcp._test_helpers`, owned by story-mcp-01) is called
+Then  the returned list contains a tool named exactly "aegis_audit_trace"
 And   that tool's `outputSchema` deep-equals `AuditReport.model_json_schema()`
 
 Given a valid trace_id and a Splunk-mock that returns 3 events for that trace_id
@@ -91,13 +91,13 @@ The coding agent runs this to confirm the story is done before opening a PR:
 
 ```bash
 # Tool is registered and exposes AUDIT_REPORT_OUTPUT_SCHEMA
+# Use the test helper from story-mcp-01 (FastMCP's protocol surface is not a sync registry)
 uv run python -c "
-import asyncio
-from aegis_mcp.server import server
+from aegis_mcp._test_helpers import list_tools_for_test
 from aegis_mcp.schemas import AUDIT_REPORT_OUTPUT_SCHEMA
 from aegis_core.audit_report import AuditReport
 assert AUDIT_REPORT_OUTPUT_SCHEMA == AuditReport.model_json_schema()
-tools = asyncio.run(server.list_tools())
+tools = list_tools_for_test()
 names = [t.name for t in tools]
 assert 'aegis_audit_trace' in names, names
 target = next(t for t in tools if t.name == 'aegis_audit_trace')
@@ -146,7 +146,8 @@ grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_mcp/src/aegis_mc
 - **Per `docs/architecture.md` ADR-005, Aegis events emit to `cisco_ai_defense:aegis_verdict` sourcetype** (Cisco Security Cloud namespace, verified live on Abu's Splunk Cloud instance). The SPL string MUST use that exact sourcetype.
 - **`eval_dimensions` is an allowlist parameter — SPL-injection-safe.** Validate against a strict allowlist: `{"verdict", "severity", "surface", "rules", "classifications", "tool_name", "agent_id"}`. Anything else → `AegisValidationError` BEFORE issuing the REST call. Do NOT interpolate user-controlled strings into SPL.
 - **Per `docs/architecture.md` § "API schemas", `Verdict.surface` for the OTel event wrapping this tool's invocation is the literal string `"mcp_audit"`.** Surface 4 dashboards filter on this exact string.
-- Splunk REST search client is `aegis_judges.foundation_sec.run_search(...)` from EPIC-05. That client already handles auth (token from `AEGIS_SPLUNK_HEC_TOKEN` env var or equivalent) and respects the `AEGIS_DEV_INSECURE_TLS=1` escape hatch per `docs/architecture.md` hard rule §7.
+- Splunk REST search client is `aegis_judges.foundation_sec.SplunkSearchClient` from EPIC-05 story-foundsec-01. Use its `submit_search(spl: str)` method to dispatch the SPL. That client already handles auth (token from `AEGIS_SPLUNK_HEC_TOKEN` env var or equivalent) and respects the `AEGIS_DEV_INSECURE_TLS=1` escape hatch per `docs/architecture.md` hard rule §7. Do NOT call a `run_search` helper — that name was an earlier draft and is wrong; the EPIC-05 contract is the `SplunkSearchClient` class.
+- **Foundation-Sec explainer contract:** if this tool ever calls `FoundationSecExplainer.explain(...)`, the canonical signature is `explain(ctx: VerdictContext) -> str` (per EPIC-05 story-foundsec-02). Do NOT call `aegis_judges.foundation_sec.explain(verdict, text)`. The `VerdictContext` model lives in `aegis_core.verdict_context` (story-core-01).
 - The aggregate `AuditReport.aggregate` field is a freeform dict that mirrors the SPL `stats` output (e.g., `{"BLOCK": 2, "ALLOW": 1}` for a `stats count by verdict`). Keep it as `dict[str, Any]` to avoid forcing a schema where the inputs vary by `eval_dimensions`.
 - For tests, use `respx` for Splunk REST HTTP mocking. Provide a fixture file `packages/aegis_mcp/tests/fixtures/splunk_audit_3events.json` with 3 representative `aegis_verdict` events spanning all four surfaces.
 - The `AuditReport` schema lives in `aegis_core` (not `aegis_mcp`) so Surface 4 dashboards (which import from `aegis_core` per architecture) can deserialize the same shape without coupling to the MCP package.

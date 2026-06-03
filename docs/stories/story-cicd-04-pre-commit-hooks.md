@@ -20,7 +20,7 @@
 
 Exact files the coding agent creates or modifies for this story:
 
-- `.pre-commit-config.yaml` — NEW — verbatim copy of `docs/cicd-spec.md` § "Pre-commit hooks" lines 406-442. Five hook groups: (1) astral-sh/ruff-pre-commit `v0.7.0` for `ruff --fix` + `ruff-format`; (2) pre-commit/mirrors-mypy `v1.13.0` strict-mode on `packages/(aegis_core|aegis_judges)/src/`; (3) local hook `check-loc` calling `bash .github/scripts/check_loc.sh`; (4) local hook `no-print` rejecting `print(` in `packages/aegis_*/src/` except `*_mock.py` / test files / lines mentioning `structlog`; (5) gitleaks/gitleaks `v8.21.2`.
+- `.pre-commit-config.yaml` — NEW — **sole owner per audit synthesis Block C**. Verbatim adapted from `docs/cicd-spec.md` § "Pre-commit hooks" lines 406-442. Five hook groups: (1) astral-sh/ruff-pre-commit `v0.7.0` for `ruff --fix` + `ruff-format`; (2) pre-commit/mirrors-mypy `v1.13.0` strict-mode on `packages/(aegis_core|aegis_judges)/src/`; (3) local hook with **canonical id `check-loc-400`** calling **`.github/scripts/check_loc.py`** (the Python script shipped by story-cicd-03; NOT the `.sh` form — there is no `.sh` form, cicd-03 ships only `.py`); (4) local hook `no-print` rejecting `print(` in `packages/aegis_*/src/` except `*_mock.py` / test files / lines mentioning `structlog`; (5) gitleaks/gitleaks `v8.21.2`. Story-skel-04 UPDATES this same file later to add additional language-specific hooks but does NOT re-define `check-loc-400`.
 - `docs/ops/pre-commit-install.md` — NEW — short doc (~30 lines) with the install command (`uv run pre-commit install`) and the bypass policy (no `--no-verify` in normal flow; emergency-only with PR description justification).
 - `README.md` — UPDATE — append a `### Local development setup` section (~10 lines) with the `uv sync` + `uv run pre-commit install` two-step. If README does not yet exist (it's owned by EPIC-11), create a stub with only this section and a TODO header.
 - `tests/fixtures/pre_commit_violators/has_print.py.fixture` — NEW — single-line file `print("hello")` used by verification to prove the no-print hook fires
@@ -50,7 +50,7 @@ And   stdout contains `Use structlog, not print()`
 And   after deleting the violator file, `uv run pre-commit run no-print --all-files` exits 0
 
 Given the 400-LOC oversized fixture is copied into `packages/aegis_core/src/aegis_core/_oversized.py` (re-use the fixture from cicd-03)
-When  `uv run pre-commit run check-loc --all-files` runs
+When  `uv run pre-commit run check-loc-400 --all-files` runs
 Then  exit code is non-zero
 And   stdout contains `400 LOC` somewhere
 
@@ -58,9 +58,13 @@ Given the gitleaks fixture file (containing a realistic-shaped AWS key) is stage
 When  `uv run pre-commit run gitleaks` runs
 Then  exit code is non-zero
 
-Given `grep -c "id: check-loc" .pre-commit-config.yaml` runs
+Given `grep -c "id: check-loc-400" .pre-commit-config.yaml` runs
 When  the output is checked
 Then  it equals `1`
+
+Given `grep -c "check_loc.py" .pre-commit-config.yaml` runs
+When  the output is checked
+Then  it is >= 1 (the canonical hook calls the .py script from cicd-03)
 
 Given `grep -c "id: no-print" .pre-commit-config.yaml` runs
 When  the output is checked
@@ -102,10 +106,10 @@ if uv run pre-commit run no-print --all-files; then
 fi
 rm packages/aegis_judges/src/aegis_judges/_violator.py
 
-# 4. check-loc hook fires on an oversized file
+# 4. check-loc-400 hook fires on an oversized file
 cp tests/fixtures/loc_oversized.py.fixture packages/aegis_core/src/aegis_core/_oversized.py
-if uv run pre-commit run check-loc --all-files; then
-  echo "FAIL: check-loc hook didn't fire"; rm packages/aegis_core/src/aegis_core/_oversized.py; exit 1
+if uv run pre-commit run check-loc-400 --all-files; then
+  echo "FAIL: check-loc-400 hook didn't fire"; rm packages/aegis_core/src/aegis_core/_oversized.py; exit 1
 fi
 rm packages/aegis_core/src/aegis_core/_oversized.py
 
@@ -137,6 +141,6 @@ All blocks must exit 0.
 - `mypy` hook `additional_dependencies: [pydantic, httpx, structlog]` is required because pre-commit runs mypy in an isolated env without the project's deps. The list mirrors the load-bearing runtime libs of `aegis_core` + `aegis_judges` per `docs/architecture.md` § "Required external libraries".
 - The gitleaks fixture must use a key SHAPE that gitleaks v8.21.2's default ruleset detects (test with `gitleaks detect --no-git -v -s tests/fixtures/pre_commit_violators/`). The well-known AWS docs example `AKIAIOSFODNN7EXAMPLE` is allowlisted in gitleaks itself per their official ruleset; use `AKIA` + a fresh random 16-char `[A-Z0-9]` string in the fixture. The fixture file's first line should be a `# Synthetic secret for gitleaks fixture, not a real credential` comment to make intent obvious to human reviewers.
 - Per `docs/cicd-spec.md` § "Failure mode handling" line 496, gitleaks failure means the secret must be rotated AND history rewritten with `git-filter-repo`. Do NOT add this story's fixture as a gitleaks allowlist entry — that would defeat the test. Instead, the verification script stages the fixture, runs gitleaks, then unstages and deletes the file (it never reaches git history).
-- Per `docs/cicd-spec.md` § "Pre-commit hooks" line 425, `check-loc` and `no-print` are `language: system` local hooks (not pulled from a remote repo). They call the script written in cicd-03 (`.github/scripts/check_loc.sh`) and an inline bash command for `no-print`.
+- Per `docs/cicd-spec.md` § "Pre-commit hooks" line 425, `check-loc-400` and `no-print` are `language: system` local hooks (not pulled from a remote repo). The `check-loc-400` hook calls the **Python** script written in cicd-03 (`.github/scripts/check_loc.py`); the `no-print` hook uses an inline bash command. Per audit synthesis Block C, the canonical loc-cap toolchain is the Python script form — cicd-03 ships only the `.py` script; there is no `.sh` form to call from this hook.
 - The README stub for `Local development setup` is intentional even though EPIC-11 (`story-readme-01-headline-and-banner-and-credits.md`) owns the full README. Cross-flag in the PR description so the EPIC-11 author knows the section already exists and merges it into the full README rather than overwriting it.
 - Per `../../../context/11-prior-art/01-build-a-thon-2025-deep-read.md`, no 2025 winner published a pre-commit config; documenting one signals build hygiene to Splunk-staff judges.

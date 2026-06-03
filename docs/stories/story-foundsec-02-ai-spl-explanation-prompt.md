@@ -20,8 +20,8 @@
 
 Exact files the coding agent creates or modifies for this story:
 
-- `packages/aegis_judges/src/aegis_judges/foundation_sec.py` — UPDATE — add `FoundationSecExplainer` class taking a `SplunkSearchClient`; method `async def explain(verdict_context: VerdictContext) -> str` returning the explanation text; reads `AEGIS_FOUNDATION_SEC_PROVIDER` env var for the `provider=...` value (defaults to the literal string `"splunk_hosted"` with a single startup WARNING `foundsec.provider.unverified` documenting that the provider name is not confirmed in public docs); reads `AEGIS_FOUNDATION_SEC_MODEL` env var (default `"foundation-sec-1.1-8b-instruct"`)
-- `packages/aegis_judges/src/aegis_judges/_explanation_prompt.py` — NEW — pure functions `build_explanation_spl(ctx: VerdictContext, provider: str, model: str) -> str` (returns the SPL string); `parse_explanation_rows(rows: list[dict]) -> str` (extracts and concatenates the `ai_output` / `_raw` field from the result rows); SPL escaping helper `escape_spl_double_quotes(s: str) -> str`; `VerdictContext` Pydantic model with fields `severity`, `rules: list[str]`, `classifications: list[str]`, `offending_text: str`, `trace_id: UUID`
+- `packages/aegis_judges/src/aegis_judges/foundation_sec.py` — UPDATE — add `FoundationSecExplainer` class taking a `SplunkSearchClient`; canonical method signature `async def explain(ctx: VerdictContext) -> str` where `VerdictContext` is imported from `aegis_core.verdict_context` (the shared shape every Aegis surface uses to invoke the explainer); returns the explanation text; reads `AEGIS_FOUNDATION_SEC_PROVIDER` env var for the `provider=...` value (defaults to the literal string `"splunk_hosted"` with a single startup WARNING `foundsec.provider.unverified` documenting that the provider name is not confirmed in public docs); reads `AEGIS_FOUNDATION_SEC_MODEL` env var (default `"foundation-sec-1.1-8b-instruct"`)
+- `packages/aegis_judges/src/aegis_judges/_explanation_prompt.py` — NEW — pure functions `build_explanation_spl(ctx: VerdictContext, provider: str, model: str) -> str` (returns the SPL string); `parse_explanation_rows(rows: list[dict]) -> str` (extracts and concatenates the `ai_output` / `_raw` field from the result rows); SPL escaping helper `escape_spl_double_quotes(s: str) -> str`. The `VerdictContext` Pydantic model is imported from `aegis_core.verdict_context` (owned by story-core-01) — do NOT redefine it locally. The explainer prompt body derives `severity`, `rules`, `classifications`, and an `offending_text` view by composing fields from the shared `VerdictContext` plus the live `Verdict` passed alongside the context (the caller resolves the offending text from `recent_messages[-1]` or an equivalent narrowing strategy)
 - `packages/aegis_judges/tests/test_explanation_prompt.py` — NEW — ≥ 14 tests: SPL output starts with `| makeresults` or `| inputlookup`-style stub; SPL contains `| ai prompt="..."`; SPL contains `provider=` and `model=foundation-sec-1.1-8b-instruct`; the prompt embeds severity, rule names, classifications; double-quotes in offending text are escaped; SPL injection attempts in offending text (e.g., `" | delete`) are escaped; parse_explanation_rows handles empty list → `""`; parse handles 1 row with `ai_output` field; parse handles `_raw` fallback; missing both fields raises `FoundationSecExplanationParseError`; `AEGIS_FOUNDATION_SEC_PROVIDER` env override is honored; default provider triggers the unverified warning exactly once across multiple instantiations; explainer integration test against mocked SplunkSearchClient
 - `packages/aegis_judges/src/aegis_judges/_foundation_sec_errors.py` — UPDATE — add `FoundationSecExplanationParseError(FoundationSecError)`
 
@@ -32,8 +32,8 @@ The coding agent must NOT modify files outside this map without re-checking `CLA
 ## Acceptance criteria (BDD — machine-verifiable)
 
 ```
-Given a VerdictContext with severity="HIGH", rules=["PII","Prompt Injection"], classifications=["PRIVACY_VIOLATION","SECURITY_VIOLATION"], offending_text="my ssn is 123-45-6789"
-When  build_explanation_spl(ctx, provider="splunk_hosted", model="foundation-sec-1.1-8b-instruct") runs
+Given a VerdictContext from `aegis_core.verdict_context` plus the live Verdict (severity="HIGH", rules=["PII","Prompt Injection"], classifications=["PRIVACY_VIOLATION","SECURITY_VIOLATION"]) and an offending_text view "my ssn is 123-45-6789"
+When  build_explanation_spl(ctx, verdict, provider="splunk_hosted", model="foundation-sec-1.1-8b-instruct") runs
 Then  the returned SPL string contains the literal substring `| ai prompt="`
 And   contains `provider=splunk_hosted`
 And   contains `model=foundation-sec-1.1-8b-instruct`
@@ -65,7 +65,8 @@ When  FoundationSecExplainer is constructed
 Then  exactly 1 structlog warning event "foundsec.provider.unverified" is emitted per process (deduped via module-level flag)
 
 Given a mocked SplunkSearchClient whose submit_search returns [{"ai_output":"X"}]
-When  explainer.explain(ctx) is awaited
+And   a VerdictContext from `aegis_core.verdict_context` is constructed
+When  `await explainer.explain(ctx)` is invoked (canonical signature `explain(ctx: VerdictContext) -> str`)
 Then  the result is the string "X"
 And   submit_search was called with an SPL string containing `provider=` and `model=foundation-sec-1.1-8b-instruct`
 
@@ -93,18 +94,30 @@ The coding agent runs this to confirm the story is done before opening a PR:
 uv run pytest packages/aegis_judges/tests/test_explanation_prompt.py -v 2>&1 | grep -cE "PASSED"
 # Must output >= 14
 
-# SPL shape sanity
+# SPL shape sanity — VerdictContext is imported from aegis_core; Verdict carries the classifier fields
 uv run python -c "
 from uuid import uuid4
-from aegis_judges._explanation_prompt import build_explanation_spl, VerdictContext
+from datetime import datetime, UTC
+from aegis_core.verdict_context import VerdictContext
+from aegis_core.verdict import Verdict, Severity, VerdictLabel, RuleHit
+from aegis_judges._explanation_prompt import build_explanation_spl
 ctx = VerdictContext(
-    severity='HIGH',
-    rules=['PII','Prompt Injection'],
-    classifications=['PRIVACY_VIOLATION','SECURITY_VIOLATION'],
-    offending_text='my ssn is 123-45-6789',
     trace_id=uuid4(),
+    agent_id='agent-1',
+    model_name='foundation-sec-1.1-8b-instruct',
+    system_prompt_summary='you are helpful',
+    recent_messages=['user: my ssn is 123-45-6789'],
+    surface='mw_model',
 )
-spl = build_explanation_spl(ctx, provider='splunk_hosted', model='foundation-sec-1.1-8b-instruct')
+verdict = Verdict(
+    trace_id=ctx.trace_id, timestamp=datetime.now(UTC), verdict=VerdictLabel.BLOCK,
+    severity=Severity.HIGH,
+    rules=[RuleHit(rule='PII', confidence=0.95, source='ai_defense'),
+           RuleHit(rule='Prompt Injection', confidence=0.9, source='ai_defense')],
+    classifications=['PRIVACY_VIOLATION','SECURITY_VIOLATION'],
+    surface='mw_model', latency_ms=42.0,
+)
+spl = build_explanation_spl(ctx, verdict, provider='splunk_hosted', model='foundation-sec-1.1-8b-instruct')
 assert '| ai prompt=\"' in spl
 assert 'provider=splunk_hosted' in spl
 assert 'model=foundation-sec-1.1-8b-instruct' in spl
@@ -117,15 +130,21 @@ print('OK')
 # Injection escape sanity
 uv run python -c "
 from uuid import uuid4
-from aegis_judges._explanation_prompt import build_explanation_spl, VerdictContext
+from datetime import datetime, UTC
+from aegis_core.verdict_context import VerdictContext
+from aegis_core.verdict import Verdict, Severity, VerdictLabel
+from aegis_judges._explanation_prompt import build_explanation_spl
 ctx = VerdictContext(
-    severity='LOW', rules=[], classifications=[],
-    offending_text='she said \"hi\" | delete', trace_id=uuid4(),
+    trace_id=uuid4(), agent_id='a', model_name='m',
+    system_prompt_summary='s',
+    recent_messages=['she said \"hi\" | delete'], surface='mw_model',
 )
-spl = build_explanation_spl(ctx, provider='splunk_hosted', model='foundation-sec-1.1-8b-instruct')
-# the prompt= value must terminate exactly once: at the close of our intended string
+verdict = Verdict(
+    trace_id=ctx.trace_id, timestamp=datetime.now(UTC), verdict=VerdictLabel.ALLOW,
+    severity=Severity.LOW, rules=[], classifications=[], surface='mw_model', latency_ms=1.0,
+)
+spl = build_explanation_spl(ctx, verdict, provider='splunk_hosted', model='foundation-sec-1.1-8b-instruct')
 between_prompt_and_provider = spl.split('prompt=\"', 1)[1].rsplit(' provider=', 1)[0]
-# raw unescaped \" inside the prompt body would cause SPL to mis-parse
 assert '\\\\\"' in between_prompt_and_provider or chr(92)+chr(34) in between_prompt_and_provider
 print('OK')
 "

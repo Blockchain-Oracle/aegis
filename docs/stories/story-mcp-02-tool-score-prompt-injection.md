@@ -21,7 +21,7 @@
 Exact files the coding agent creates or modifies for this story:
 
 - `packages/aegis_mcp/src/aegis_mcp/tools/__init__.py` — NEW — empty package marker
-- `packages/aegis_mcp/src/aegis_mcp/tools/score_prompt_injection.py` — NEW — MCP tool definition; `class ScoreInputs(BaseModel): input_text: str; context: dict | None = None`; `async def score_prompt_injection(args: ScoreInputs) -> Verdict`; registers with the server's registry from `mcp-01` via `register_tool("aegis_score_prompt_injection", ...)`; routes through `aegis_judges.splunklib_security_fallback.detect_injection` (cheap first-pass) then escalates ambiguous cases to `aegis_judges.ai_defense.inspect(...)`; constructs `Verdict` with `surface="mcp_score"`; emits OTel `gen_ai.evaluation.result` event on each call via `aegis_core.otel`
+- `packages/aegis_mcp/src/aegis_mcp/tools/score_prompt_injection.py` — NEW — MCP tool definition; `class ScoreInputs(BaseModel): input_text: str; context: dict | None = None`; `async def score_prompt_injection(args: ScoreInputs) -> Verdict`; registers with the server's registry from `mcp-01` via `register_tool("aegis_score_prompt_injection", ...)`; routes through `splunklib.ai.security.detect_injection` (cheap first-pass) then escalates ambiguous cases to `aegis_judges.ai_defense.inspect(...)`; constructs `Verdict` with `surface="mcp_score"`; emits OTel `gen_ai.evaluation.result` event on each call via `aegis_core.otel`
 - `packages/aegis_mcp/src/aegis_mcp/server.py` — UPDATE — import and call `score_prompt_injection.register(server)` during server bootstrap so the tool is exposed in `tools/list`
 - `packages/aegis_mcp/tests/test_tool_score_prompt_injection.py` — NEW — ≥ 12 behavioral tests: tool is discoverable via `tools/list`, `outputSchema` equals `Verdict.model_json_schema()`, benign input → `VerdictLabel.ALLOW`, classic jailbreak ("ignore previous instructions") → `VerdictLabel.BLOCK` with `Severity.HIGH` and a `RuleHit(rule="Prompt Injection", ...)`, ambiguous input → escalation path exercised (mocked AI Defense returns MEDIUM), `surface` field equals "mcp_score" on every verdict, `latency_ms` is populated and > 0, `trace_id` is a valid UUID, `structuredContent` round-trip validates against `outputSchema`, OTel event `gen_ai.evaluation.result` emitted once per call, MCP error path returns `isError: true` (in-band) on `AegisJudgeError` rather than JSON-RPC error per spec
 
@@ -33,8 +33,8 @@ The coding agent must NOT modify files outside this map without re-checking `CLA
 
 ```
 Given the server is bootstrapped
-When  the MCP `tools/list` request is sent in-process
-Then  the response contains a tool named exactly "aegis_score_prompt_injection"
+When  `list_tools_for_test()` (from `aegis_mcp._test_helpers`, owned by story-mcp-01) is called
+Then  the returned list contains a tool named exactly "aegis_score_prompt_injection"
 And   that tool's `outputSchema` deep-equals `Verdict.model_json_schema()`
 
 Given input_text="Hello, how are you?"
@@ -83,11 +83,11 @@ The coding agent runs this to confirm the story is done before opening a PR:
 
 ```bash
 # Tool is registered and exposes the expected outputSchema
+# Use the test helper from story-mcp-01 (FastMCP's protocol surface is not a sync registry)
 uv run python -c "
-import asyncio
-from aegis_mcp.server import server
+from aegis_mcp._test_helpers import list_tools_for_test
 from aegis_mcp.schemas import VERDICT_OUTPUT_SCHEMA
-tools = asyncio.run(server.list_tools())
+tools = list_tools_for_test()
 names = [t.name for t in tools]
 assert 'aegis_score_prompt_injection' in names, names
 target = next(t for t in tools if t.name == 'aegis_score_prompt_injection')
@@ -129,7 +129,7 @@ grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_mcp/src/aegis_mc
 - **Per `../../../context/10-standards/01-mcp-spec-deep.md`, MCP tools support `structuredContent` + `outputSchema` for rich validated verdicts.** Return the `Verdict` Pydantic model — the server harness from `mcp-01` will serialize it to `structuredContent` and (per the spec's backwards-compat MUST) also include a serialized JSON `TextContent` block.
 - **Per `../../../context/10-standards/01-mcp-spec-deep.md`, tool execution errors are reported in-band via `isError: true` on the result, NOT as JSON-RPC errors.** Catch `AegisJudgeError` from the judges layer and convert to an `isError: true` result with the verdict (still typed) in `structuredContent` — the LLM can self-correct per the spec's "Clients SHOULD provide tool execution errors to language models to enable self-correction."
 - **Per `../../../context/10-standards/02-otel-genai-semantic-conventions.md`, MCP sub-convention attrs (`mcp.method.name`, `mcp.session.id`) co-emit with `gen_ai.evaluation.result` events.** The enclosing span is set up by the server skeleton (`mcp-01`); this story only emits the evaluation event via `aegis_core.otel.emit_evaluation_result(verdict)`.
-- **Per `docs/architecture.md` ADR-010, `splunklib.ai`'s 9-regex `detect_injection` is the cheap first-pass classifier.** Call it first via `aegis_judges.splunklib_security_fallback`. Only escalate to `aegis_judges.ai_defense.inspect(...)` on ambiguous (LOW-confidence-positive or borderline) outcomes — keeps the cheap path cheap.
+- **Per `docs/architecture.md` ADR-010, `splunklib.ai`'s 9-regex `detect_injection` is the cheap first-pass classifier.** Call it first via `splunklib.ai.security`. Only escalate to `aegis_judges.ai_defense.inspect(...)` on ambiguous (LOW-confidence-positive or borderline) outcomes — keeps the cheap path cheap.
 - **Per `docs/architecture.md` § "API schemas", `Verdict.surface` for this tool is the literal string `"mcp_score"`.** Do not invent new surface values; that breaks Surface 4 (Splunk app) dashboard filters.
 - `ScoreInputs.context` is an optional dict carrying agent metadata (e.g., `{"agent_id": "...", "tool_being_called": "..."}`) — pass it through to the AI Defense `metadata` field unchanged.
 - For tests, use `respx` to mock AI Defense HTTP calls (per `docs/architecture.md` soft rules). The `aegis_judges.ai_defense_mock` module from EPIC-04 already wires this up — import its fixtures.

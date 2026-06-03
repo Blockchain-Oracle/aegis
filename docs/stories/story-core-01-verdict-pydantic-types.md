@@ -21,8 +21,10 @@
 Exact files the coding agent creates or modifies for this story:
 
 - `packages/aegis_core/src/aegis_core/verdict.py` — NEW — `Severity`, `VerdictLabel`, `RuleHit`, `Verdict` pydantic v2 BaseModel + a `verdict_to_json_schema()` helper. ≤ 250 LOC. mypy --strict clean.
-- `packages/aegis_core/src/aegis_core/__init__.py` — UPDATE — re-export `Severity`, `VerdictLabel`, `RuleHit`, `Verdict`; update `__all__`
+- `packages/aegis_core/src/aegis_core/verdict_context.py` — NEW — `VerdictContext` pydantic v2 BaseModel: `trace_id: UUID`, `agent_id: str`, `model_name: str`, `system_prompt_summary: str`, `recent_messages: list[str]` (compact chronological snippets — bounded for prompt-size safety), `surface: Literal["mw_model","mw_tool","mw_subagent","mcp_score","mcp_judge_tool","mcp_check_output","mcp_audit","defenseclaw"]`. Used by `FoundationSecExplainer.explain(ctx: VerdictContext)` (EPIC-05 story-foundsec-02) and by all post-inference + post-tool-call helpers across the four surfaces to carry the explainer context. ≤ 100 LOC.
+- `packages/aegis_core/src/aegis_core/__init__.py` — UPDATE — re-export `Severity`, `VerdictLabel`, `RuleHit`, `Verdict`, `VerdictContext`; update `__all__`
 - `packages/aegis_core/tests/test_verdict.py` — NEW — pytest + hypothesis property tests covering: enum membership, JSON Schema export contains all expected keys, round-trip serialization, severity ordering, NONE_SEVERITY accepted, rejected invalid `confidence` (out of [0,1])
+- `packages/aegis_core/tests/test_verdict_context.py` — NEW — pytest tests covering: `VerdictContext` constructs with the 6 required fields; `surface` Literal rejects unknown values; round-trips through `model_dump_json()` + `model_validate_json()`; rejects non-UUID `trace_id`; accepts empty `recent_messages` list; JSON Schema export contains all 6 documented top-level properties
 - `packages/aegis_core/tests/conftest.py` — NEW — hypothesis profile registration for fast/CI runs
 - `packages/aegis_core/pyproject.toml` — UPDATE — add `pydantic >= 2` to `dependencies`; add `hypothesis` to root `[dependency-groups].dev` (or workspace dev group — preserve existing entries)
 
@@ -66,6 +68,20 @@ Given JSON Schema is exported
 When  `uv run python -c "from aegis_core.verdict import Verdict; s=Verdict.model_json_schema(); assert 'trace_id' in s['properties']; assert 'rules' in s['properties']; assert 'classifications' in s['properties']; assert 'surface' in s['properties']; print('schema ok')"` runs
 Then  stdout contains "schema ok"
 
+Given VerdictContext is imported
+When  `uv run python -c "from uuid import uuid4; from aegis_core.verdict_context import VerdictContext; ctx = VerdictContext(trace_id=uuid4(), agent_id='agent-1', model_name='gpt-4o-mini', system_prompt_summary='you are helpful', recent_messages=['user: hi','assistant: hi'], surface='mw_model'); print(ctx.surface)"` runs
+Then  exit code is 0
+And   stdout contains "mw_model"
+
+Given VerdictContext is imported
+When  `uv run python -c "from uuid import uuid4; from aegis_core.verdict_context import VerdictContext; VerdictContext(trace_id=uuid4(), agent_id='a', model_name='m', system_prompt_summary='s', recent_messages=[], surface='nonsense_surface')"` runs
+Then  exit code is non-zero
+And   stderr contains "ValidationError"
+
+Given VerdictContext JSON Schema is exported
+When  `uv run python -c "from aegis_core.verdict_context import VerdictContext; s=VerdictContext.model_json_schema(); assert {'trace_id','agent_id','model_name','system_prompt_summary','recent_messages','surface'} <= set(s['properties'].keys()); print('vctx schema ok')"` runs
+Then  stdout contains "vctx schema ok"
+
 Given the test suite runs
 When  `uv run pytest packages/aegis_core/tests/test_verdict.py -q` runs
 Then  exit code is 0
@@ -81,7 +97,7 @@ When  `uv run ruff check packages/aegis_core/src/aegis_core/verdict.py` runs
 Then  exit code is 0
 
 Given the 400-LOC rule is enforced
-When  `uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/verdict.py` runs
+When  `uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/verdict.py` runs
 Then  exit code is 0
 ```
 
@@ -96,6 +112,7 @@ The coding agent runs this to confirm the story is done before opening a PR:
 ```bash
 # 1. Imports resolve
 uv run python -c "from aegis_core.verdict import Verdict, Severity, VerdictLabel, RuleHit; print('imports ok')"
+uv run python -c "from aegis_core.verdict_context import VerdictContext; print('VerdictContext import ok')"
 
 # 2. Severity enum has NONE_SEVERITY (matches Cisco AI Defense response enum)
 uv run python -c "from aegis_core.verdict import Severity; assert 'NONE_SEVERITY' in [s.value for s in Severity]; print('NONE_SEVERITY ok')"
@@ -123,7 +140,7 @@ uv run mypy packages/aegis_core/src
 uv run ruff check packages/aegis_core/src/aegis_core/verdict.py
 
 # 8. LOC under 400
-uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/verdict.py
+uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/verdict.py
 
 # 9. §14 clean — no mock/fake/dummy hits in production code
 grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_core/src/ --include="*.py"

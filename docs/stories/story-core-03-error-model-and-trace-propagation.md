@@ -83,7 +83,7 @@ When  `uv run ruff check packages/aegis_core/src/aegis_core/errors.py packages/a
 Then  exit code is 0
 
 Given the 400-LOC rule
-When  `uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/errors.py packages/aegis_core/src/aegis_core/trace.py` runs
+When  `uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/errors.py packages/aegis_core/src/aegis_core/trace.py` runs
 Then  exit code is 0
 ```
 
@@ -143,7 +143,7 @@ uv run mypy packages/aegis_core/src
 uv run ruff check packages/aegis_core/src/aegis_core/errors.py packages/aegis_core/src/aegis_core/trace.py
 
 # 8. LOC under 400 for both files
-uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/errors.py packages/aegis_core/src/aegis_core/trace.py
+uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/errors.py packages/aegis_core/src/aegis_core/trace.py
 
 # 9. §14 clean
 grep -E "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_core/src/aegis_core/errors.py packages/aegis_core/src/aegis_core/trace.py

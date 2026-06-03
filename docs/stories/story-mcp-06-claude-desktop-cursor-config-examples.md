@@ -26,6 +26,11 @@ Exact files the coding agent creates or modifies for this story:
 - `docs/integrations/_examples/aegis-mcp-stdio.json` — NEW — pure JSON file with the stdio config (importable by README + linkable from the integration docs)
 - `docs/integrations/_examples/aegis-mcp-http.json` — NEW — pure JSON file with the HTTP config
 - `docs/integrations/_examples/aegis-mcp-coexist-with-splunk.json` — NEW — pure JSON file showing the coexistence pattern: both `splunk-mcp-server` and `aegis-mcp-server` keys in the same `mcpServers` block
+- `docs/integrations/README.md` — UPDATE — additionally include a section titled exactly **"Coexistence with Splunk MCP Server"** that enumerates verbatim the 10 native Splunk MCP Server tools and 4 SAIA tools that Aegis tools coexist alongside (so a judge or developer sees no name collisions and the two surfaces are clearly partitioned). Verbatim tool lists (cite `../../../context/06-splunk-ai-stack/03-splunk-mcp-server.md`):
+  - **Splunk MCP Server (10 native `splunk_*` tools):** `splunk_run_query`, `splunk_get_info`, `splunk_get_indexes`, `splunk_get_index_info`, `splunk_get_metadata`, `splunk_get_user_info`, `splunk_get_user_list`, `splunk_get_kv_store_collections`, `splunk_get_knowledge_objects`, `splunk_run_saved_search`
+  - **SAIA (4 `saia_*` tools, when co-installed):** `saia_generate_spl`, `saia_explain_spl`, `saia_ask_splunk_question`, `saia_optimize_spl`
+  - **Aegis (4 `aegis_*` tools, this story's surface):** `aegis_score_prompt_injection`, `aegis_judge_tool_call`, `aegis_check_output_leak`, `aegis_audit_trace`
+  No name collisions between any of the three sets — the three prefixes (`splunk_`, `saia_`, `aegis_`) partition cleanly.
 
 The coding agent must NOT modify files outside this map without re-checking `CLAUDE.md`.
 
@@ -82,6 +87,18 @@ Given the integration docs cite the closed-source-Splunk-MCP fact
 When  `grep -li "closed-source" docs/integrations/README.md` runs
 Then  the output is "docs/integrations/README.md" (citation present)
 
+Given docs/integrations/README.md has a "Coexistence with Splunk MCP Server" section
+When  `grep -c "Coexistence with Splunk MCP Server" docs/integrations/README.md` runs
+Then  stdout is ≥ 1
+
+Given the README enumerates all 10 native Splunk MCP tools verbatim
+When  `for t in splunk_run_query splunk_get_info splunk_get_indexes splunk_get_index_info splunk_get_metadata splunk_get_user_info splunk_get_user_list splunk_get_kv_store_collections splunk_get_knowledge_objects splunk_run_saved_search; do grep -q "$t" docs/integrations/README.md || echo "MISSING $t"; done` runs
+Then  no "MISSING" line is emitted
+
+Given the README enumerates all 4 SAIA tools verbatim
+When  `for t in saia_generate_spl saia_explain_spl saia_ask_splunk_question saia_optimize_spl; do grep -q "$t" docs/integrations/README.md || echo "MISSING $t"; done` runs
+Then  no "MISSING" line is emitted
+
 Given all docs are markdown
 When  `find docs/integrations -name '*.py' -not -path '*/_examples/*'` runs
 Then  the output is empty (no Python files in this story per spec)
@@ -127,6 +144,13 @@ print('OK coexist')
 # Closed-source-Splunk citation present
 grep -q "closed-source" docs/integrations/README.md || { echo "MISSING citation"; exit 1; }
 echo "OK citation"
+
+# Coexistence section enumerates all 10 splunk_* + 4 saia_* tool names verbatim
+grep -q "Coexistence with Splunk MCP Server" docs/integrations/README.md || { echo "MISSING coexistence section"; exit 1; }
+for t in splunk_run_query splunk_get_info splunk_get_indexes splunk_get_index_info splunk_get_metadata splunk_get_user_info splunk_get_user_list splunk_get_kv_store_collections splunk_get_knowledge_objects splunk_run_saved_search saia_generate_spl saia_explain_spl saia_ask_splunk_question saia_optimize_spl; do
+  grep -q "$t" docs/integrations/README.md || { echo "MISSING coexistence tool: $t"; exit 1; }
+done
+echo "OK coexistence enumeration"
 
 # No Python files in this story (markdown + JSON only)
 [ -z "$(find docs/integrations -name '*.py' -not -path '*/_examples/*')" ] || { echo "UNEXPECTED Python files"; exit 1; }

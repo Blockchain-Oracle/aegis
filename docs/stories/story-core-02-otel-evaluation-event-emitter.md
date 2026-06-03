@@ -87,7 +87,7 @@ When  `uv run ruff check packages/aegis_core/src/aegis_core/otel.py` runs
 Then  exit code is 0
 
 Given the 400-LOC rule
-When  `uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/otel.py` runs
+When  `uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/otel.py` runs
 Then  exit code is 0
 ```
 
@@ -122,7 +122,7 @@ uv run mypy packages/aegis_core/src
 uv run ruff check packages/aegis_core/src/aegis_core/otel.py
 
 # 6. LOC under 400
-uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/otel.py
+uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/otel.py
 
 # 7. §14 clean — no mock/fake/dummy hits in production code (test_otel.py uses InMemorySpanExporter which is real, not a mock)
 grep -E "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_core/src/aegis_core/otel.py

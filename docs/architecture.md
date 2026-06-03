@@ -83,9 +83,11 @@ aegis/
 │   │   │   ├── ai_defense.py                        # Cisco AI Defense Inspection API client
 │   │   │   ├── ai_defense_mock.py                   # respx-based mock (dev default)
 │   │   │   ├── foundation_sec.py                    # |ai SPL invocation client (explainer)
-│   │   │   ├── defenseclaw_backend.py               # fallback regex backend via DefenseClaw rules
-│   │   │   ├── luna2_client.py                      # future plug-in (stub returning NotImplementedError)
-│   │   │   └── splunklib_security_fallback.py       # calls splunklib.ai.security.detect_injection as cheap first-pass
+│   │   │   ├── defenseclaw_backend.py               # DefenseClaw rule-pack wrapper (story-judges-06)
+│   │   │   └── luna2_client.py                      # future plug-in (stub returning NotImplementedError)
+│   │   │   # NOTE: cheap first-pass injection check calls `splunklib.ai.security.detect_injection`
+│   │   │   #       DIRECTLY from caller sites (e.g., aegis_mcp.tools.score_prompt_injection,
+│   │   │   #       aegis_mw.tool_middleware). No internal wrapper module — keeps the cheap path cheap.
 │   │   └── tests/
 │   ├── aegis_mw/                                    # Surface 1 — middleware library for splunklib.ai
 │   │   ├── pyproject.toml
@@ -146,7 +148,7 @@ aegis/
 │       ├── README.md                                # how to point DefenseClaw at our Splunk index
 │       ├── examples/defenseclaw.yaml                # config example
 │       └── upstream-pr-notes.md                     # notes for contribute-back PR
-├── Synthetic-Data/                                  # mirrors DNS Guard exact convention (typo preserved)
+├── Synthetic-Data/                                  # mirrors DNS Guard convention (corrected spelling per ADR-011; typo NOT preserved)
 │   ├── README.md
 │   ├── generate_agent_verdicts.py
 │   ├── jailbreak_corpus/
@@ -177,7 +179,7 @@ aegis/
 
 ### Hard rules
 
-1. **Every source file ≤ 400 LOC** (excluding blank lines + pure comments). Enforced by `.pre-commit-hooks/check_loc.py` and by CI fail-on-exceed. If a file approaches 400 LOC, split it via composition or extraction. No exceptions.
+1. **Every source file ≤ 400 LOC** (excluding blank lines + pure comments). Enforced by `.github/scripts/check_loc.py` (canonical Python script, called from both the pre-commit hook `check-loc-400` and the CI `loc-cap` job per ADR-009 + audit synthesis Block C). If a file approaches 400 LOC, split it via composition or extraction. No exceptions.
 2. **`mypy --strict` clean** for `packages/aegis_core/` and `packages/aegis_judges/`. Non-strict acceptable for `packages/aegis_mw/`, `packages/aegis_mcp/`, `splunk_apps/aegis_app/bin/`.
 3. **ruff clean** across the entire monorepo (config: line-length 100, all rules enabled except E501 deferred to formatter).
 4. **All tests pass** — `uv run pytest` returns 0 across all packages.
@@ -267,7 +269,10 @@ class VerdictLabel(str, Enum):
 class RuleHit(BaseModel):
     rule: str                                          # e.g., "Prompt Injection"
     confidence: float = Field(ge=0.0, le=1.0)
-    source: Literal["ai_defense", "defenseclaw_regex", "splunklib_security", "foundation_sec_classifier"]
+    source: Literal["ai_defense", "defenseclaw_regex", "splunklib_security"]
+    # NOTE: Foundation-Sec NEVER appears in `source` — per ADR-003 it generates `Verdict.explanation`
+    # only, never `RuleHit`. Adding `"foundation_sec_classifier"` here would silently re-introduce
+    # the off-label classifier usage the audits caught and ADR-003 explicitly forbids.
 
 class Verdict(BaseModel):
     trace_id: UUID
@@ -366,7 +371,7 @@ Auth: header `X-Cisco-AI-Defense-API-Key: <key>`. Regional endpoints `us.api.ins
 
 **ADR-003 — Foundation-Sec as explainer, NOT as classifier.** Three independent context audits (R5, R7, R12) verified that Cisco markets and deploys Foundation-Sec as a generator (security copilot). Using it as a binary classifier would be off-label. Aegis uses it only to generate human-readable explanations of WHY a verdict was reached; Cisco AI Defense Inspection API handles binary classification.
 
-**ADR-004 — Our own MCP server (Surface 2) running parallel to Splunk's, NOT registering into Splunk's.** Splunk's MCP Server is closed-source (`CiscoDevNet/Splunk-MCP-Server-official` is README+LICENSE only — multi-confirmed). Aegis MCP exposes `sentinel_*` and `aegis_*` tool names; Splunk's `splunk_*` and `saia_*` tools coexist via standard MCP client multi-server configs.
+**ADR-004 — Our own MCP server (Surface 2) running parallel to Splunk's, NOT registering into Splunk's.** Splunk's MCP Server is closed-source (`CiscoDevNet/Splunk-MCP-Server-official` is README+LICENSE only — multi-confirmed). Aegis MCP exposes the `aegis_*` tool-name prefix only; Splunk's 10 `splunk_*` tools and 4 `saia_*` tools (when SAIA co-installed) coexist via standard MCP client multi-server configs. (The earlier draft of this ADR also mentioned a `sentinel_*` prefix — that was a leftover from the pre-rename codename; Aegis MCP tools use the `aegis_*` prefix exclusively. See `story-mcp-01` for the canonical tool-naming convention.)
 
 **ADR-005 — Aegis events emit to `cisco_ai_defense:aegis_verdict` sourcetype.** Cisco Security Cloud app 7404 v3.6.6 (Cisco Systems, 55K installs) populates `cisco_ai_defense:*` sourcetypes. Colocating Aegis events in the same namespace gives SOC analysts unified search without schema migration. Verified live via Abu's Splunk Cloud instance on 2026-06-02.
 
@@ -400,7 +405,7 @@ See `docs/cicd-spec.md` for the YAML.
 
 The build is "done" only when each box is checked. The coding agent verifies all of these before submitting:
 
-### Hackathon submission requirements (`context/01-prizes-tracks.md`)
+### Hackathon submission requirements (`research/splunk-agentic-ops-2026/01-prizes-tracks.md`)
 - [ ] Architecture diagram `architecture_diagram.png` (or `.md` / `.pdf`) at repo root
 - [ ] Demo video < 3 min on YouTube
 - [ ] Public GitHub repo with Apache-2.0 license (auto-detectable by GitHub)

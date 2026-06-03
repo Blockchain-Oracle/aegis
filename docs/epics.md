@@ -3,7 +3,7 @@
 **Hackathon:** Splunk Agentic Ops Hackathon (Devpost)
 **Status:** DRAFT (locks after Abu approval)
 **Total epics:** 12
-**Total stories:** ~57 (final count after stories land — see `sprint-status.yaml`)
+**Total stories:** 66 (final count after Block D additions — see `sprint-status.yaml`)
 **Estimated total build time:** **agent-driven**, no human-hour budget per Abu's no-deadline-pressure rule. Each story scoped to ≤ 400 LOC contribution; orchestrator dispatches in dependency order.
 
 ---
@@ -12,28 +12,28 @@
 
 | Epic | Title | Surface | Stories | Depends on |
 |---|---|---|---|---|
-| **EPIC-01** | **CI/CD foundation** | Cross-cutting | 8 | None — FIRST |
-| EPIC-02 | Repo skeleton + coding standards + 400-LOC enforcement | Cross-cutting | 4 | EPIC-01 |
-| EPIC-03 | Core domain types (Verdict, OTel emitter, error model) | Cross-cutting | 4 | EPIC-02 |
-| EPIC-04 | Cisco AI Defense Inspection API client (typed, mockable, retries, circuit breaker) | Judgment layer | 5 | EPIC-03 |
+| **EPIC-02** | **Repo skeleton (uv workspace) + coding standards + 400-LOC enforcement** | Cross-cutting | 4 | None — FIRST (workspace must exist before CI can use it) |
+| EPIC-01 | CI/CD foundation | Cross-cutting | 8 | EPIC-02 (CI needs the workspace skeleton to build/test against) |
+| EPIC-03 | Core domain types (Verdict, OTel emitter, error model) | Cross-cutting | 5 | EPIC-02 |
+| EPIC-04 | Cisco AI Defense Inspection API client (typed, mockable, retries, circuit breaker) | Judgment layer | 6 | EPIC-03 |
 | EPIC-05 | Foundation-Sec invocation via \| ai SPL (explainer, NOT judge) | Judgment layer | 3 | EPIC-03 |
 | EPIC-06 | **Surface 1** — aegis-mw middleware library for splunklib.ai | S1 | 7 | EPIC-03, EPIC-04, EPIC-05 |
 | EPIC-07 | **Surface 2** — Aegis MCP Server (own, parallel to Splunk's) | S2 | 6 | EPIC-03, EPIC-04, EPIC-05 |
 | EPIC-08 | **Surface 3** — DefenseClaw integration | S3 | 3 | EPIC-03 |
-| EPIC-09 | **Surface 4** — Splunk app (SPL/MLTK + 3 Dashboard Studio v2 dashboards) | S4 | 10 | EPIC-03 (events) |
-| EPIC-10 | Eval harness + synthetic data generator | Cross-cutting | 5 | EPIC-04, EPIC-05, EPIC-06 |
+| EPIC-09 | **Surface 4** — Splunk app (SPL/MLTK + 3 Dashboard Studio v2 dashboards) | S4 | 11 | EPIC-03 (events) |
+| EPIC-10 | Eval harness + synthetic data generator | Cross-cutting | 6 | EPIC-04, EPIC-05, EPIC-06 |
 | EPIC-11 | Demo video assets + README + architecture diagrams | Cross-cutting | 3 | All build epics |
-| EPIC-12 | AppInspect compliance hardening + optional Splunkbase submission prep | Cross-cutting | 2 | EPIC-09 |
+| EPIC-12 | AppInspect compliance hardening + Splunkbase prep + GitHub ops | Cross-cutting | 4 | EPIC-09, EPIC-01 |
 
 ---
 
 ## EPIC-01 — CI/CD foundation
 
-**Business value:** Every subsequent epic depends on the pipeline being green. If CI/CD isn't right, every coding agent wastes work fighting it. This is the foundation. Abu's explicit instruction.
+**Business value:** Every subsequent epic (after the workspace exists) depends on the pipeline being green. If CI/CD isn't right, every coding agent wastes work fighting it.
 
 **Anchor doc:** `docs/cicd-spec.md`
 
-**Dependencies:** None
+**Dependencies:** EPIC-02 (CI must build/test against the uv workspace skeleton — workspace ownership lives in story-skel-01, owned by EPIC-02; per audit synthesis Block C the EPIC-02 → EPIC-01 order is the canonical dispatch direction)
 **Stories:** 8
 **Files under `docs/stories/`:**
 - `story-cicd-01-build-pipeline-python-wheels.md`
@@ -49,11 +49,11 @@
 
 ## EPIC-02 — Repo skeleton + coding standards + 400-LOC enforcement
 
-**Business value:** Locks the monorepo layout, dep manifests, formatter / linter / typechecker configs, contribution conventions. Without these, every coding agent picks a different style and PRs become unreviewable.
+**Business value:** Locks the monorepo layout (uv workspace), dep manifests, formatter / linter / typechecker configs, contribution conventions. Per audit synthesis Block C, story-skel-01 (uv workspace + 4 package shells + eval pyproject) is the FIRST story in the whole project — CI cannot build a workspace that doesn't exist.
 
 **Anchor doc:** `docs/architecture.md` § "Repo structure", § "Coding standards"
 
-**Dependencies:** EPIC-01 (CI must enforce these)
+**Dependencies:** None — FIRST (story-skel-01 ships the uv workspace skeleton; EPIC-01 then builds CI on top). Story-skel-02 (ruff/mypy), story-skel-03 (CLAUDE.md), and story-skel-04 (pre-commit verification) can land after the EPIC-01 stories.
 **Stories:** 4
 **Files under `docs/stories/`:**
 - `story-skel-01-uv-workspace-pyproject.md`
@@ -70,12 +70,13 @@
 **Anchor doc:** `docs/architecture.md` § "API schemas"
 
 **Dependencies:** EPIC-02
-**Stories:** 4
+**Stories:** 5
 **Files under `docs/stories/`:**
 - `story-core-01-verdict-pydantic-types.md`
 - `story-core-02-otel-evaluation-event-emitter.md`
 - `story-core-03-error-model-and-trace-propagation.md`
 - `story-core-04-structlog-config-and-conventions.md`
+- `story-core-05-otel-hec-exporter-config.md`
 
 ---
 
@@ -86,13 +87,14 @@
 **Anchor doc:** `context/07-cisco-stack/01-ai-defense-deep.md`
 
 **Dependencies:** EPIC-03
-**Stories:** 5
+**Stories:** 6
 **Files under `docs/stories/`:**
 - `story-judges-01-ai-defense-request-response-models.md`
 - `story-judges-02-ai-defense-httpx-client-with-retries.md`
 - `story-judges-03-ai-defense-circuit-breaker-tenacity.md`
 - `story-judges-04-ai-defense-mock-respx-fixtures.md`
 - `story-judges-05-ai-defense-end-to-end-integration-test.md`
+- `story-judges-06-defenseclaw-python-shim.md`
 
 ---
 
@@ -170,7 +172,7 @@
 **Anchor doc:** `docs/architecture.md` § "Repo structure" > `splunk_apps/aegis_app/`, `docs/ux-spec.md`, `docs/eval-spec.md`
 
 **Dependencies:** EPIC-03 (event shape must be locked before SPL parsing rules are written)
-**Stories:** 10
+**Stories:** 11
 **Files under `docs/stories/`:**
 - `story-app-01-app-conf-and-metadata-skeleton.md`
 - `story-app-02-props-transforms-for-aegis-verdict-sourcetype.md`
@@ -182,6 +184,7 @@
 - `story-app-08-risk-factors-conf-es-rba-integration.md`
 - `story-app-09-static-icons-and-app-assets.md`
 - `story-app-10-app-vision-loop-validation.md`
+- `story-app-13-synthetic-verdict-emitter-script.md`
 
 ---
 
@@ -192,13 +195,14 @@
 **Anchor doc:** `docs/eval-spec.md`
 
 **Dependencies:** EPIC-04 (need AI Defense client), EPIC-05 (need Foundation-Sec for explanation comparison), EPIC-06 (S1 is end-to-end the easiest to run eval through)
-**Stories:** 5
+**Stories:** 6
 **Files under `docs/stories/`:**
 - `story-eval-01-synthetic-data-generator-dns-guard-pattern.md`
 - `story-eval-02-jailbreakbench-and-advbench-loaders.md`
 - `story-eval-03-imprompter-payload-corpus-from-pdf.md`
 - `story-eval-04-three-baselines-defenseclaw-gptoss-aidefense-alone.md`
 - `story-eval-05-metrics-and-report-generator.md`
+- `story-eval-06-end-to-end-agent-to-splunk-integration.md`
 
 ---
 
@@ -206,7 +210,7 @@
 
 **Business value:** Judges read README before they demo. Demo video < 3 min is a non-negotiable submission requirement. Architecture diagram is non-negotiable submission requirement. Direct scoring lever.
 
-**Anchor doc:** `docs/PRD.md` § "Demo moment", `context/01-prizes-tracks.md`
+**Anchor doc:** `docs/PRD.md` § "Demo moment", `research/splunk-agentic-ops-2026/01-prizes-tracks.md`
 
 **Dependencies:** EPIC-01 through EPIC-10 complete (so README has real eval numbers)
 **Stories:** 3
@@ -217,17 +221,19 @@
 
 ---
 
-## EPIC-12 — AppInspect compliance hardening + Splunkbase submission prep
+## EPIC-12 — AppInspect compliance hardening + Splunkbase prep + GitHub Ops
 
-**Business value:** Mirroring CIMplicity AI 2025 winner's pattern (`.appinspect.expect.yaml` + `.appinspect.manualcheck.yaml`) signals to Splunk staff judges that we know what shipping a Splunkbase app actually requires. Optional Splunkbase submission for post-hackathon distribution.
+**Business value:** Mirroring CIMplicity AI 2025 winner's pattern (`.appinspect.expect.yaml` + `.appinspect.manualcheck.yaml`) signals to Splunk staff judges that we know what shipping a Splunkbase app actually requires. Optional Splunkbase submission for post-hackathon distribution. Also lands the GitHub-side operational config (branch protection + secrets registry + ADR template) that `docs/cicd-spec.md` § "Acceptance for the CI/CD epic as a whole" requires.
 
-**Anchor doc:** `context/05-splunk-core/09-appinspect.md`, `context/11-prior-art/01-build-a-thon-2025-deep-read.md`
+**Anchor doc:** `context/05-splunk-core/09-appinspect.md`, `context/11-prior-art/01-build-a-thon-2025-deep-read.md`, `docs/cicd-spec.md` § "Branch protection" + § "Secrets to configure in GitHub"
 
-**Dependencies:** EPIC-09
-**Stories:** 2
+**Dependencies:** EPIC-09 (AppInspect stories), EPIC-01 (Ops stories — CI workflows must exist before branch protection can reference them)
+**Stories:** 4
 **Files under `docs/stories/`:**
 - `story-app-11-appinspect-expect-yaml-and-manual-checks.md`
 - `story-app-12-splunkbase-submission-package-and-checklist.md`
+- `story-ops-01-branch-protection-config.md`
+- `story-ops-02-github-secrets-and-adr-template.md`
 
 ---
 
@@ -237,7 +243,10 @@ The orchestrator dispatches stories in this exact order, respecting cross-epic d
 
 ```yaml
 dispatch_queue:
-  # ---- EPIC-01 (foundation) ----
+  # ---- EPIC-02 (repo skeleton — must land FIRST so CI has a workspace to build) ----
+  - story-skel-01-uv-workspace-pyproject
+
+  # ---- EPIC-01 (CI/CD foundation — depends on skel-01) ----
   - story-cicd-01-build-pipeline-python-wheels
   - story-cicd-02-test-pipeline-pytest-respx
   - story-cicd-03-loc-cap-enforcement
@@ -247,8 +256,7 @@ dispatch_queue:
   - story-cicd-07-security-scan-pipeline
   - story-cicd-08-release-pipeline-signed
 
-  # ---- EPIC-02 (repo skeleton) ----
-  - story-skel-01-uv-workspace-pyproject
+  # ---- EPIC-02 remainder (after CI is green) ----
   - story-skel-02-ruff-mypy-config
   - story-skel-03-claude-md-and-contribution-conventions
   - story-skel-04-loc-check-script-and-pre-commit
@@ -258,6 +266,7 @@ dispatch_queue:
   - story-core-02-otel-evaluation-event-emitter
   - story-core-03-error-model-and-trace-propagation
   - story-core-04-structlog-config-and-conventions
+  - story-core-05-otel-hec-exporter-config
 
   # ---- EPIC-04 + EPIC-05 (judgment layer) — can run in parallel ----
   - story-judges-01-ai-defense-request-response-models
@@ -286,10 +295,12 @@ dispatch_queue:
   - story-dc-01-config-delta-docs-and-example
   - story-dc-02-ai-defense-backend-upstream-pr
   - story-dc-03-langgraph-example-agent
+  - story-judges-06-defenseclaw-python-shim   # EPIC-04 — depends on dc-01 (rule pack provenance) + core-01
 
   # ---- EPIC-09 (Surface 4 — Splunk app) — sequential within epic ----
   - story-app-01-app-conf-and-metadata-skeleton
   - story-app-02-props-transforms-for-aegis-verdict-sourcetype
+  - story-app-13-synthetic-verdict-emitter-script   # after app-02 (sourcetype config) + eval-01 (corpora); unblocks app-10 + demo-01
   - story-app-03-savedsearches-and-mltk-macros
   - story-app-04-collections-conf-kvstore-verdict-history
   - story-app-05-dashboard-agent-risk-overview
@@ -305,10 +316,13 @@ dispatch_queue:
   - story-eval-03-imprompter-payload-corpus-from-pdf
   - story-eval-04-three-baselines-defenseclaw-gptoss-aidefense-alone
   - story-eval-05-metrics-and-report-generator
+  - story-eval-06-end-to-end-agent-to-splunk-integration   # after mw-07 + app-13 + core-05; dress rehearsal for demo
 
-  # ---- EPIC-12 (AppInspect hardening — must run before EPIC-11) ----
+  # ---- EPIC-12 (AppInspect hardening + GitHub Ops — must run before EPIC-11) ----
   - story-app-11-appinspect-expect-yaml-and-manual-checks
   - story-app-12-splunkbase-submission-package-and-checklist
+  - story-ops-01-branch-protection-config            # after cicd-07; documents + scripts main-branch protection
+  - story-ops-02-github-secrets-and-adr-template     # after cicd-07 + skel-03; secrets registry + docs/adrs/ bootstrap
 
   # ---- EPIC-11 (README + demo video — LAST) ----
   - story-readme-01-headline-and-banner-and-credits
@@ -316,4 +330,4 @@ dispatch_queue:
   - story-demo-01-screencast-and-script
 ```
 
-Total: ~57 stories.
+Total: 66 stories.

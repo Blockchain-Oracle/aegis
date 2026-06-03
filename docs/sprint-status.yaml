@@ -15,11 +15,11 @@ stories:
   - id: story-cicd-01-build-pipeline-python-wheels
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
-    depends_on: []
+    depends_on: [story-skel-01-uv-workspace-pyproject]
   - id: story-cicd-02-test-pipeline-pytest-respx
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
-    depends_on: [story-cicd-01-build-pipeline-python-wheels]
+    depends_on: [story-skel-01-uv-workspace-pyproject, story-cicd-01-build-pipeline-python-wheels]
   - id: story-cicd-03-loc-cap-enforcement
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
@@ -31,11 +31,11 @@ stories:
   - id: story-cicd-05-appinspect-gate
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
-    depends_on: [story-cicd-01-build-pipeline-python-wheels]
+    depends_on: [story-cicd-01-build-pipeline-python-wheels, story-app-01-app-conf-and-metadata-skeleton]
   - id: story-cicd-06-eval-smoke-job
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
-    depends_on: [story-cicd-02-test-pipeline-pytest-respx]
+    depends_on: [story-skel-01-uv-workspace-pyproject, story-cicd-02-test-pipeline-pytest-respx]
   - id: story-cicd-07-security-scan-pipeline
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
@@ -49,7 +49,7 @@ stories:
   - id: story-skel-01-uv-workspace-pyproject
     epic: "EPIC-02 — Repo skeleton + coding standards"
     status: PENDING
-    depends_on: [story-cicd-01-build-pipeline-python-wheels]
+    depends_on: []
   - id: story-skel-02-ruff-mypy-config
     epic: "EPIC-02 — Repo skeleton + coding standards"
     status: PENDING
@@ -274,3 +274,39 @@ stories:
     epic: "EPIC-11 — README + demo"
     status: PENDING
     depends_on: [story-app-12-splunkbase-submission-package-and-checklist, story-mw-07-profiles-and-config-fsi-hipaa-pubsec, story-mcp-06-claude-desktop-cursor-config-examples, story-readme-01-headline-and-banner-and-credits]
+
+  # ---- BLOCK D additions (audit-driven new stories) ----
+
+  # EPIC-03 addition — OTel HEC exporter bridge
+  - id: story-core-05-otel-hec-exporter-config
+    epic: "EPIC-03 — Core domain types"
+    status: PENDING
+    depends_on: [story-core-02-otel-evaluation-event-emitter]
+
+  # EPIC-04 addition — DefenseClaw Python shim (resolves the 3-story orphaned import)
+  - id: story-judges-06-defenseclaw-python-shim
+    epic: "EPIC-04 — Cisco AI Defense client"
+    status: PENDING
+    depends_on: [story-core-01-verdict-pydantic-types, story-dc-01-config-delta-docs-and-example]
+
+  # EPIC-09 addition — Synthetic verdict emitter for dashboards + demo
+  - id: story-app-13-synthetic-verdict-emitter-script
+    epic: "EPIC-09 — Surface 4 Splunk app"
+    status: PENDING
+    depends_on: [story-app-02-props-transforms-for-aegis-verdict-sourcetype, story-eval-01-synthetic-data-generator-dns-guard-pattern]
+
+  # EPIC-10 addition — End-to-end agent → Splunk integration dress rehearsal
+  - id: story-eval-06-end-to-end-agent-to-splunk-integration
+    epic: "EPIC-10 — Eval harness"
+    status: PENDING
+    depends_on: [story-mw-07-profiles-and-config-fsi-hipaa-pubsec, story-app-13-synthetic-verdict-emitter-script, story-core-05-otel-hec-exporter-config]
+
+  # EPIC-12 additions — Ops hardening (branch protection + secrets/ADR template)
+  - id: story-ops-01-branch-protection-config
+    epic: "EPIC-12 — AppInspect hardening + Ops"
+    status: PENDING
+    depends_on: [story-cicd-07-security-scan-pipeline]
+  - id: story-ops-02-github-secrets-and-adr-template
+    epic: "EPIC-12 — AppInspect hardening + Ops"
+    status: PENDING
+    depends_on: [story-cicd-07-security-scan-pipeline, story-skel-03-claude-md-and-contribution-conventions]

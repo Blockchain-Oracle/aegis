@@ -22,7 +22,8 @@ Exact files the coding agent creates or modifies for this story:
 
 - `packages/aegis_mcp/pyproject.toml` — NEW — workspace member, deps on `aegis-core`, `mcp` (official Python SDK), `pydantic>=2`, `opentelemetry-api`, `opentelemetry-sdk`, `opentelemetry-util-genai`, `structlog`
 - `packages/aegis_mcp/src/aegis_mcp/__init__.py` — NEW — empty package marker with `__version__ = "0.1.0"`
-- `packages/aegis_mcp/src/aegis_mcp/server.py` — NEW — FastMCP-style server registration via official `mcp` SDK; instantiates `FastMCP("aegis-mcp")`; exposes `register_tool(name, fn, input_schema, output_schema)` registry helper; `serve_stdio()` and `serve_http()` entrypoints chosen by `AEGIS_MCP_TRANSPORT` env var (defaults to `stdio`); HTTP path binds to `127.0.0.1` only and validates `Origin` header per MCP spec
+- `packages/aegis_mcp/src/aegis_mcp/server.py` — NEW — FastMCP-style server registration via official `mcp` SDK; instantiates `FastMCP("aegis-mcp")`; exposes `register_tool(name, fn, input_schema, output_schema)` registry helper backed by an internal `_REGISTERED_TOOLS: dict[str, RegisteredTool]` mapping (the registry IS the source of truth that `_test_helpers.list_tools_for_test()` reads); `serve_stdio()` and `serve_http()` entrypoints chosen by `AEGIS_MCP_TRANSPORT` env var (defaults to `stdio`); HTTP path binds to `127.0.0.1` only and validates `Origin` header per MCP spec
+- `packages/aegis_mcp/src/aegis_mcp/_test_helpers.py` — NEW — test-only helper module exporting `def list_tools_for_test() -> list[RegisteredTool]` which returns the values of the internal `_REGISTERED_TOOLS` registry from `server.py`. Used by mcp-02 through mcp-05 BDD tests as the canonical way to enumerate registered tools without depending on the official `mcp` SDK's `FastMCP` surface (which exposes tools via async protocol methods, not a sync registry call). `RegisteredTool` is the dataclass-or-Pydantic shape produced by `register_tool` with at minimum `.name`, `.outputSchema`, `.input_schema`, and `.fn` attributes
 - `packages/aegis_mcp/src/aegis_mcp/schemas.py` — NEW — exports `VERDICT_OUTPUT_SCHEMA = Verdict.model_json_schema()` from `aegis_core.verdict.Verdict`
 - `packages/aegis_mcp/src/aegis_mcp/otel.py` — NEW — OTel helper that wraps each tool invocation in a `mcp.server` span (SERVER kind) tagged with `mcp.method.name="tools/call"`, `mcp.session.id`, `mcp.protocol.version="2025-11-25"`, and co-emits `gen_ai.evaluation.result` events via `aegis_core.otel`
 - `packages/aegis_mcp/src/aegis_mcp/__main__.py` — NEW — `python -m aegis_mcp` entrypoint that calls `server.serve_stdio()` or `server.serve_http()` based on env var
@@ -44,6 +45,15 @@ Given the server registry is empty by default
 When  the no-op `_ping` tool is registered via `register_tool("_ping", ...)` with `outputSchema=VERDICT_OUTPUT_SCHEMA`
 Then  `tools/list` over the in-process JSON-RPC harness returns exactly one tool named `_ping`
 And   the returned tool record's `outputSchema` field deep-equals `Verdict.model_json_schema()`
+
+Given `_ping` is registered
+When  `uv run python -c "from aegis_mcp._test_helpers import list_tools_for_test; tools = list_tools_for_test(); names=[t.name for t in tools]; assert '_ping' in names, names; print('OK')"` runs
+Then  exit code is 0
+And   stdout contains "OK"
+
+Given `_ping` is registered with `outputSchema=VERDICT_OUTPUT_SCHEMA`
+When  `list_tools_for_test()` is called from a test
+Then  the entry for `_ping` exposes `.outputSchema` deep-equal to `Verdict.model_json_schema()`
 
 Given the server is invoked with AEGIS_MCP_TRANSPORT unset
 When  `uv run python -c "from aegis_mcp.server import resolve_transport; print(resolve_transport())"` runs
@@ -94,6 +104,16 @@ print('OK')
 "
 # Must print 'OK'
 
+# Test helper exposes the registry without going through the FastMCP async protocol surface
+uv run python -c "
+from aegis_mcp._test_helpers import list_tools_for_test
+# After _ping is registered at server bootstrap, list_tools_for_test() returns it
+tools = list_tools_for_test()
+assert any(t.name == '_ping' for t in tools), [t.name for t in tools]
+print('OK')
+"
+# Must print 'OK'
+
 # `mcp` SDK is the official one
 uv run python -c "import mcp, mcp.server; print('official mcp:', mcp.__name__)"
 # Must print 'official mcp: mcp'
@@ -131,7 +151,7 @@ grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_mcp/src/
 
 ## Notes for coding agent
 
-- **Per `../../../context/06-splunk-ai-stack/03-splunk-mcp-server.md`, Splunk's official MCP Server is closed-source (CiscoDevNet repo is README+LICENSE only, multi-confirmed).** We run our OWN MCP server alongside, NOT registering into theirs. Aegis tools live under names like `aegis_*` / `sentinel_*` and coexist with Splunk's `splunk_*` and `saia_*` tools via standard MCP client multi-server configs.
+- **Per `../../../context/06-splunk-ai-stack/03-splunk-mcp-server.md`, Splunk's official MCP Server is closed-source (CiscoDevNet repo is README+LICENSE only, multi-confirmed).** We run our OWN MCP server alongside, NOT registering into theirs. Aegis tools use the `aegis_*` prefix exclusively. They coexist with Splunk's 10 native `splunk_*` tools and 4 `saia_*` tools (when SAIA is co-installed) via standard MCP client multi-server configs.
 - **Per `../../../context/10-standards/01-mcp-spec-deep.md`, MCP spec 2025-11-25 is Stable; tools support `structuredContent` + `outputSchema` for rich validated verdicts.** Every Aegis tool's `outputSchema` is derived from Pydantic via `Verdict.model_json_schema()` — protocol-level validation at the MCP server boundary catches schema drift.
 - **Per `../../../context/10-standards/01-mcp-spec-deep.md`, the two standard transports are stdio (preferred) and Streamable HTTP.** stdio is the default per the spec: "Clients SHOULD support stdio whenever possible." HTTP transport MUST validate the `Origin` header (DNS-rebinding mitigation) and SHOULD bind only to `127.0.0.1` when running locally.
 - **Per `../../../context/10-standards/02-otel-genai-semantic-conventions.md`, MCP sub-convention attrs (`mcp.method.name`, `mcp.session.id`, `mcp.protocol.version`, `mcp.resource.uri`) co-emit with `gen_ai.evaluation.result` events.** Use a SERVER-kind span named `{mcp.method.name} {tool_name}` per the semconv span-name guidance. Reuse `aegis_core.otel` for the evaluation event emission — do not duplicate emitter logic here.
@@ -141,3 +161,4 @@ grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_mcp/src/
 - The MCP protocol version we declare on initialization is the current Stable: `"2025-11-25"`. Do NOT hardcode `"2025-03-26"` (that's what Splunk's older MCP Server reports per the CiscoDevNet README).
 - Banned per `docs/architecture.md`: `flask`, `django`, `fastapi` for the MCP server. Use the official `mcp` SDK only.
 - The `_ping` no-op tool exists only for skeleton-level tests and stays in the package after stories `mcp-02..05` land — it's the cheapest health-probe surface for the Splunk app's dashboard heartbeat.
+- **`asyncio.run(server.list_tools())` does NOT work against the official `mcp` SDK's `FastMCP` surface** — `FastMCP.list_tools` is exposed via the MCP protocol's `tools/list` method, not as a sync registry call. Downstream stories (mcp-02 through mcp-05) MUST use `from aegis_mcp._test_helpers import list_tools_for_test` instead. The helper reads the internal `_REGISTERED_TOOLS` dict that `register_tool` populates, which IS the source of truth for what the server exposes via the protocol surface.

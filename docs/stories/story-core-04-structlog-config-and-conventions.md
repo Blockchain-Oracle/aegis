@@ -80,7 +80,7 @@ When  `uv run ruff check packages/aegis_core/src/aegis_core/logging.py` runs
 Then  exit code is 0
 
 Given the 400-LOC rule
-When  `uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/logging.py` runs
+When  `uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/logging.py` runs
 Then  exit code is 0
 
 Given the banned-pattern rule
@@ -147,7 +147,7 @@ uv run mypy packages/aegis_core/src
 uv run ruff check packages/aegis_core/src/aegis_core/logging.py
 
 # 8. LOC under 400
-uv run .pre-commit-hooks/check_loc.py packages/aegis_core/src/aegis_core/logging.py
+uv run python .github/scripts/check_loc.py packages/aegis_core/src/aegis_core/logging.py
 
 # 9. No print() in production code
 grep -nE '\bprint\(' packages/aegis_core/src/aegis_core/logging.py

@@ -2,7 +2,7 @@
 
 **ID:** story-skel-01-uv-workspace-pyproject
 **Epic:** EPIC-02 — Repo skeleton + coding standards
-**Depends on:** story-cicd-01-build-pipeline-python-wheels
+**Depends on:** None — FIRST story (workspace must exist before CI can use it)
 **Estimate:** ~1.5h
 **Status:** PENDING
 

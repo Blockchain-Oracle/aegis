@@ -20,7 +20,16 @@
 
 Exact files the coding agent creates or modifies for this story:
 
-- `packages/aegis_mw/src/aegis_mw/model_middleware.py` — NEW — **first half only**: defines `SafetyModelMiddleware(AgentMiddleware)`; implements `async def model_middleware(self, request: ModelRequest, handler: ModelMiddlewareHandler) -> ModelResponse` with the **pre-inference** flow only — see "split note" below. The post-inference PII/PHI/PCI scan is added in story-mw-04 by appending to this same file. This story's logic: (a) iterate `request.state.messages`; (b) extract the latest `HumanMessage` content + any tool result strings; (c) cheap first-pass via `splunklib.ai.security.detect_injection(text)` (the 9-regex); (d) if hit and `config.escalate_on_first_pass_hit` is True, call `aegis_judges.ai_defense.inspect(text, rules_enabled=["Prompt Injection"])` and use that response as the binary classifier; (e) BLOCK → raise `aegis_core.errors.ModelInputBlockedByAegis(verdict)`; (f) MODIFY → replace the offending message content with `verdict.modifications["redacted_text"]` and call `await handler(new_request)`; (g) ALLOW → `await handler(request)`. The function MUST contain a clearly-marked `# --- POST-INFERENCE SCAN: see story-mw-04 ---` anchor comment **after** the `response = await handler(request)` line (no post-inference logic in this story; the anchor reserves the seam).
+- `packages/aegis_mw/src/aegis_mw/model_middleware.py` — NEW — ships TWO standalone artifacts plus the composing factory:
+  1. **Standalone helper** `async def pre_inference_scan(messages: list, profile: Profile) -> Verdict` — pure verdict-producer: (a) extract the latest `HumanMessage` content + any `ToolMessage` content; (b) cheap first-pass via `splunklib.ai.security.detect_injection(text)`; (c) if hit and `profile.escalate_on_first_pass_hit` is True, call `aegis_judges.ai_defense.inspect(text, rules_enabled=["Prompt Injection"])`; (d) return the resulting `Verdict` regardless of label. The helper never raises on BLOCK and never calls `handler` — it ONLY classifies. The caller (the factory below) interprets the verdict.
+  2. **`model_middleware()` factory** — composes the wrap: defines `class SafetyModelMiddleware(AgentMiddleware)` with `async def model_middleware(self, request, handler) -> ModelResponse`. Body: `pre_verdict = await pre_inference_scan(request.state.messages, profile)`; explicit branch by `pre_verdict.verdict`:
+     - **BLOCK** → emit OTel verdict event (`surface="mw_model"`); raise `aegis_core.errors.ModelInputBlockedByAegis(pre_verdict)`. **The model is NEVER called and the post-scan is NEVER run.**
+     - **MODIFY** → construct a `new_request` with the offending message content replaced by `pre_verdict.modifications["redacted_text"]`; `response = await handler(new_request)`; then call the post-scan injection point on `response` (story-mw-04 wires the real call here; this story leaves a placeholder `# --- POST-INFERENCE SCAN: see story-mw-04 ---` that mw-04 replaces with a `post_verdict = await post_inference_scan(response, profile)` call). Return value depends on the post-scan; for this story (mw-03 alone) the placeholder returns `response` unchanged after emitting the pre-scan verdict.
+     - **ALLOW** → `response = await handler(request)`; then call the post-scan injection point on `response` (same placeholder anchor as the MODIFY branch). Return `response`.
+
+  This story ONLY implements the pre-scan helper + the factory wrap skeleton; the post-scan call sites are left as the explicit `# --- POST-INFERENCE SCAN: see story-mw-04 ---` anchor comment that story-mw-04 turns into a real `post_inference_scan(...)` call. Crucially the anchor lives in BOTH the MODIFY branch AND the ALLOW branch (NOT inside one of them) — story-mw-04 wires post-scan into both branches.
+
+  Combined file budget: this story ≤ 200 LOC; story-mw-04 adds ≤ 200 LOC; the combined `model_middleware.py` MUST stay ≤ 400 LOC. The 400-LOC verification command lives in story-mw-04's BDD; this story's BDD verifies ≤ 200 LOC.
 - `packages/aegis_mw/src/aegis_mw/_first_pass.py` — NEW — tiny helper module exporting `cheap_first_pass(text: str) -> bool` that simply re-exports `splunklib.ai.security.detect_injection`; rationale: gives us a single seam for swapping the cheap path without touching the middleware; includes an inline citation comment to the deep-read doc and to the security.py source
 - `packages/aegis_mw/src/aegis_mw/__init__.py` — UPDATE — `SafetyModelMiddleware` re-export resolves to the new implementation
 - `packages/aegis_core/src/aegis_core/errors.py` — UPDATE — add `ModelInputBlockedByAegis(AegisError)` taking `verdict: Verdict`
@@ -70,7 +79,16 @@ Then  the line count is ≤ 200 (this story owns the first half; story-mw-04 app
 
 Given the model_middleware.py file
 When  `grep -c "POST-INFERENCE SCAN: see story-mw-04" packages/aegis_mw/src/aegis_mw/model_middleware.py` runs
-Then  the output is "1" (the seam anchor is present for story-mw-04)
+Then  the output is "2" (one anchor in the MODIFY branch, one anchor in the ALLOW branch — story-mw-04 wires post-scan into both)
+
+Given the pre_inference_scan standalone helper is importable
+When  `uv run python -c "from aegis_mw.model_middleware import pre_inference_scan; import inspect; assert inspect.iscoroutinefunction(pre_inference_scan); print('OK')"` runs
+Then  stdout contains "OK"
+
+Given the BLOCK branch must never invoke handler
+When  the model middleware processes a message that the pre-scan classifies as BLOCK
+Then  the inner handler is NOT called (mocked handler asserts zero invocations)
+And   no post-inference scan call site executes for the BLOCK path
 
 Given the §14 grep is run on changed source (excluding test files)
 When  `grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_mw/src/aegis_mw/model_middleware.py packages/aegis_mw/src/aegis_mw/_first_pass.py` runs
@@ -104,9 +122,13 @@ uv run pytest packages/aegis_mw/tests/test_model_middleware_pre.py -v 2>&1 | gre
 wc -l packages/aegis_mw/src/aegis_mw/model_middleware.py | awk '{ if ($1 > 200) exit 1 }'
 # Must exit 0
 
-# Story-mw-04 seam anchor is present
+# Story-mw-04 seam anchors are present (MODIFY branch + ALLOW branch)
 grep -c "POST-INFERENCE SCAN: see story-mw-04" packages/aegis_mw/src/aegis_mw/model_middleware.py
-# Must output 1
+# Must output 2
+
+# pre_inference_scan is exported as a standalone helper
+uv run python -c "from aegis_mw.model_middleware import pre_inference_scan; import inspect; assert inspect.iscoroutinefunction(pre_inference_scan); print('OK')"
+# Must print 'OK'
 
 # §14 clean
 grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_mw/src/aegis_mw/model_middleware.py packages/aegis_mw/src/aegis_mw/_first_pass.py
@@ -135,7 +157,15 @@ uv run mypy packages/aegis_mw/src/aegis_mw/model_middleware.py packages/aegis_mw
   - `"do anything now"`
   - `"reveal your system prompt"`
   - `"print your instructions"`
-- **STORY SPLIT NOTE — IMPORTANT.** This story writes the FIRST HALF of `model_middleware.py` (pre-inference scan). Story-mw-04 appends the SECOND HALF (post-inference PII/PHI/PCI scan) to the SAME file. The file must end with an anchor comment exactly `# --- POST-INFERENCE SCAN: see story-mw-04 ---` placed AFTER the `response = await handler(request)` line and BEFORE the `return response` line, so story-mw-04 has an unambiguous insertion point. This split exists because the combined file would exceed the 400-LOC cap; story-mw-03's contribution is ≤ 200 LOC and story-mw-04's contribution is ≤ 200 LOC.
+- **STORY SPLIT NOTE — IMPORTANT.** This story ships:
+  1. The standalone `pre_inference_scan(messages, profile) -> Verdict` helper (pure verdict producer; never raises on BLOCK; never calls handler).
+  2. The `SafetyModelMiddleware` class + composing factory `model_middleware()` that interprets the pre-scan verdict via an explicit per-label branch (BLOCK / MODIFY / ALLOW) and either raises (BLOCK), rewrites then calls handler (MODIFY), or calls handler (ALLOW).
+  3. TWO anchor comments — exactly `# --- POST-INFERENCE SCAN: see story-mw-04 ---` — placed inside the MODIFY branch (after the rewritten-input `handler(new_request)` call) AND inside the ALLOW branch (after the plain `handler(request)` call). Each anchor sits BEFORE its branch's `return response`. Two anchors, not one, because BLOCK never reaches a post-scan, MODIFY post-scans the rewritten path's response, and ALLOW post-scans the original-path's response — same helper, two call sites.
+  4. NO post-inference logic — story-mw-04 owns it. Story-mw-04 replaces both anchor comments with `post_verdict = await post_inference_scan(response, profile)` plus the per-verdict handling (BLOCK → raise; MODIFY → return redacted; ALLOW → return original) WITHOUT removing the anchor comments (anchors stay as inline citation that mw-04 wrote here).
+
+  The split exists because the combined file would exceed the 400-LOC cap; mw-03's contribution is ≤ 200 LOC and mw-04's contribution is ≤ 200 LOC.
+
+- **Seam semantics — required reading for story-mw-04.** BLOCK verdict from pre-scan → never call the model, never call the post-scan (handler is NOT invoked, post-scan is NOT invoked). MODIFY verdict from pre-scan → rewrite input → call model → post-scan runs on the response of the rewritten path. ALLOW verdict from pre-scan → call model on original input → post-scan runs on the response. The composing factory in this story leaves the per-branch call sites explicit so mw-04's "insert at anchor" semantics are unambiguous.
 - The cheap-first-pass scope is the latest **user-supplied** content: the most recent `HumanMessage` plus any `ToolMessage` content present in `request.state.messages`. Do NOT scan system prompts (`SystemMessage`) — those are trusted operator-authored text.
 - The AI Defense escalation uses `rules_enabled=["Prompt Injection"]` ONLY for this pre-inference call. The other 10 rules are reserved for the post-inference output scan in story-mw-04 (PII / PHI / PCI emphasis).
 - `truncate_input(text, max_length=DEFAULT_MAX_INPUT_LENGTH)` (DEFAULT_MAX_INPUT_LENGTH = 10_000, per `../../../context/02-agent-frameworks/06-splunklib-ai-deep-read.md`) should be applied BEFORE first-pass scanning to bound the regex cost on adversarial mega-inputs.

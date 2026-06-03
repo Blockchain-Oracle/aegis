@@ -8,7 +8,7 @@
 
 ## Why this matters
 
-Per `context/04-judges.md` and the architect-lens review in `09-synthesis.md`, **Technological Implementation** is the tiebreaker criterion. The single artifact that demonstrates implementation quality unambiguously is the eval table. It's the difference between "we shipped a thing" and "we shipped a thing that measurably works."
+Per `research/splunk-agentic-ops-2026/04-judges.md` and the architect-lens review in `09-synthesis.md`, **Technological Implementation** is the tiebreaker criterion. The single artifact that demonstrates implementation quality unambiguously is the eval table. It's the difference between "we shipped a thing" and "we shipped a thing that measurably works."
 
 Per `context/01-threat-landscape/02-jailbreak-techniques.md` (now grounded with the verbatim Anthropic Many-Shot Jailbreaking PDF), we know that content-only safety nets have a theoretical ceiling. The eval table must be honest about that ceiling — promise probabilistic detection, not deterministic immunity.
 
@@ -199,7 +199,7 @@ Per the architect lens and Abu's explicit anti-hallucination rule:
 
 EPIC-10 is "done" when:
 
-- [ ] `Synthetic-Data/` folder mirrors DNS Guard's exact convention (typo preserved per ADR-011)
+- [ ] `Synthetic-Data/` folder mirrors DNS Guard's *content* convention (corrected spelling per ADR-011 — DNS Guard's `Syntethic-Data/` typo is NOT preserved; mirror the Python-data-generator pattern, deterministic seed, `[1/N]` print headers, summary table — not the misspelling)
 - [ ] All 5 datasets load via `aegis_eval.<dataset>` modules
 - [ ] All 4 baselines run end-to-end against all 5 datasets in `eval/scripts/run_full.py`
 - [ ] `eval/results/<sha>/summary.md` is the source of `docs/eval-results.md` (CI auto-commits on `main`)

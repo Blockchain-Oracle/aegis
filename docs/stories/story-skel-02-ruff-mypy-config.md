@@ -45,11 +45,11 @@ Then  exit code is 0
 And   stdout contains "Success: no issues found"
 
 Given mypy.ini per-module override sets strict = True for aegis_core
-When  `uv run python -c "import configparser; c=configparser.ConfigParser(); c.read('mypy.ini'); print(c.get('mypy-aegis_core.*','strict'))"` runs
+When  `uv run python -c "import configparser; c=configparser.RawConfigParser(); c.read('mypy.ini'); print(c.get('mypy-aegis_core.*','strict'))"` runs
 Then  stdout contains "True"
 
 Given mypy.ini per-module override sets strict = True for aegis_judges
-When  `uv run python -c "import configparser; c=configparser.ConfigParser(); c.read('mypy.ini'); print(c.get('mypy-aegis_judges.*','strict'))"` runs
+When  `uv run python -c "import configparser; c=configparser.RawConfigParser(); c.read('mypy.ini'); print(c.get('mypy-aegis_judges.*','strict'))"` runs
 Then  stdout contains "True"
 
 Given .ruff.toml line-length is 100

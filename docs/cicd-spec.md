@@ -98,7 +98,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          bash .github/scripts/check_loc.sh
+          uv run python .github/scripts/check_loc.py
 
   test:
     name: Tests
@@ -190,7 +190,7 @@ jobs:
 
 ```bash
 #!/usr/bin/env bash
-# .github/scripts/check_loc.sh
+# .github/scripts/check_loc.py (canonical — Python; replaces the historical .sh form)
 set -euo pipefail
 
 THRESHOLD=400
@@ -425,7 +425,7 @@ repos:
     hooks:
       - id: check-loc
         name: 400-LOC cap
-        entry: bash .github/scripts/check_loc.sh
+        entry: uv run python .github/scripts/check_loc.py
         language: system
         pass_filenames: false
 
@@ -479,7 +479,7 @@ CI/CD epic is "done" when:
 - [ ] All 4 workflow YAML files exist under `.github/workflows/`
 - [ ] All required status checks listed above appear in a PR's "Checks" view and all turn green
 - [ ] Pre-commit installed and working locally
-- [ ] `check_loc.sh` exists and rejects a deliberately-too-big test file
+- [ ] `check_loc.py` exists and rejects a deliberately-too-big test file
 - [ ] `parse_appinspect.py` exists and a sample AppInspect output is parsed correctly
 - [ ] Branch protection documented in `docs/ops/branch-protection.md`
 - [ ] Secrets list documented in `docs/ops/secrets.md`

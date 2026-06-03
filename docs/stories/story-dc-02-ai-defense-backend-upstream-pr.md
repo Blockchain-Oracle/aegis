@@ -56,8 +56,8 @@ When  `grep -cE "[Aa]egis" integrations/defenseclaw/upstream-pr-notes.md` runs
 Then  the count is ≥ 1 (upstream-consumer use case names Aegis)
 
 Given integrations/defenseclaw/upstream-pr-notes.md exists
-When  `awk '/^\\\`\\\`\\\`diff/,/^\\\`\\\`\\\`$/' integrations/defenseclaw/upstream-pr-notes.md | wc -l` runs
-Then  the count is ≥ 20 (at least two diff blocks: rules.go interface diff + rules_test.go diff)
+When  `uv run python -c "import re, pathlib; c=pathlib.Path('integrations/defenseclaw/upstream-pr-notes.md').read_text(); m=re.findall(r'^\`\`\`diff\$.*?^\`\`\`\$', c, re.MULTILINE|re.DOTALL); print(sum(len(b.splitlines()) for b in m))"` runs
+Then  the count is ≥ 20 (at least two diff blocks: rules.go interface diff + rules_test.go diff; Python regex used in place of `awk` because zsh and bash both choke on the backtick-fence pattern in the awk script)
 
 Given integrations/defenseclaw/upstream-fork-ref.yaml exists
 When  `uv run python -c "import yaml; d=yaml.safe_load(open('integrations/defenseclaw/upstream-fork-ref.yaml')); assert d['upstream_repo']=='cisco-ai-defense/defenseclaw'; assert d['upstream_base_branch']=='main'; assert d['fork_branch']=='feat/rules-ai-defense-backend'; assert 'fork_repo' in d; assert 'pr_url' in d; print('OK')"` runs
@@ -101,7 +101,12 @@ grep -q -i "aegis" integrations/defenseclaw/upstream-pr-notes.md
 grep -q -E "CHANGELOG" integrations/defenseclaw/upstream-pr-notes.md
 
 # Diff blocks present
-diff_lines=$(awk '/^```diff/,/^```$/' integrations/defenseclaw/upstream-pr-notes.md | wc -l)
+diff_lines=$(uv run python -c "
+import re, pathlib
+content = pathlib.Path('integrations/defenseclaw/upstream-pr-notes.md').read_text()
+matches = re.findall(r'^\`\`\`diff\$.*?^\`\`\`\$', content, re.MULTILINE | re.DOTALL)
+print(sum(len(m.splitlines()) for m in matches))
+")
 if [ "$diff_lines" -lt 20 ]; then echo "diff blocks too small: $diff_lines"; exit 1; fi
 
 # Fork-ref schema

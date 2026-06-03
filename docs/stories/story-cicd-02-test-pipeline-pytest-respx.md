@@ -2,7 +2,7 @@
 
 **ID:** story-cicd-02-test-pipeline-pytest-respx
 **Epic:** EPIC-01 — CI/CD foundation
-**Depends on:** story-cicd-01-build-pipeline-python-wheels
+**Depends on:** story-skel-01-uv-workspace-pyproject, story-cicd-01-build-pipeline-python-wheels
 **Estimate:** ~1.5h
 **Status:** PENDING
 

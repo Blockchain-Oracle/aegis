@@ -21,7 +21,7 @@
 Exact files the coding agent creates or modifies for this story:
 
 - `README.md` — REPLACE — full rewrite of the existing spec-phase README. Section order locked per `docs/PRD.md` § "README shape (§13)": (1) title + one-line pitch, (2) banner image with light + dark variants via HTML `<picture>` tag, (3) demo video YouTube link as click-through image (uses `docs/assets/thumbnail.png` from story-demo-01 as poster), (4) architecture diagram link to repo-root `architecture_diagram.png` + dark variant (lands in story-readme-02), (5) quick install (exactly 3 shell commands), (6) eval table (transcluded from `docs/eval-results.md` via the include block comment markers `<!-- BEGIN eval-table --> ... <!-- END eval-table -->` that `eval/src/aegis_eval/report.py` from story-eval-05 writes between), (7) credits section (5 named incumbents, verbatim), (8) license (Apache-2.0), (9) the four-surfaces table (preserved from current README). Total target: ≤ 200 lines including blanks.
-- `docs/assets/banner.png` — NEW — 1280×640 light-variant banner PNG (matches DNS Guard 2025 `Images/banners/banner.png` dimensions per `../../../context/11-prior-art/01-build-a-thon-2025-deep-read.md`). Generated programmatically by `scripts/build_banner.py` from a Pillow-based template; foreground text "Aegis — the runtime safety net every CISO needs before AI agents touch their Splunk data."; subtitle "Splunk Agentic Ops Hackathon · Apache-2.0 · 2026-06-15"; no Splunk/Cisco trademarked logos (Devpost rule per `../../../context/01-prizes-tracks.md`).
+- `docs/assets/banner.png` — NEW — 1280×640 light-variant banner PNG (matches DNS Guard 2025 `Images/banners/banner.png` dimensions per `../../../context/11-prior-art/01-build-a-thon-2025-deep-read.md`). Generated programmatically by `scripts/build_banner.py` from a Pillow-based template; foreground text "Aegis — the runtime safety net every CISO needs before AI agents touch their Splunk data."; subtitle "Splunk Agentic Ops Hackathon · Apache-2.0 · 2026-06-15"; no Splunk/Cisco trademarked logos (Devpost rule per `../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md`).
 - `docs/assets/banner-dark.png` — NEW — dark-variant of the same banner; same dimensions; dark background (#0A0E1A) + light foreground; light/dark variants ship together per the DNS Guard pattern (`../../../context/11-prior-art/01-build-a-thon-2025-deep-read.md`).
 - `scripts/build_banner.py` — NEW — Pillow-based banner generator (≤ 120 LOC). Two CLI flags: `--variant=light|dark` and `--out=<path>`. Hard-coded text from PRD § goal + one-line pitch. Deterministic output (fixed seed for any layout randomness). Re-runnable so the banner regenerates on text changes.
 - `docs/eval-results.md` — NEW (empty stub) — placeholder file with the comment markers `<!-- BEGIN eval-table -->` and `<!-- END eval-table -->` between which `eval/src/aegis_eval/report.py` (story-eval-05) writes the markdown table. README transcludes this file via a shell script (next bullet) at release time. Stub also includes a `mock=true` placeholder row so README renders before live eval runs.
@@ -48,11 +48,11 @@ Then  all three patterns appear (light + dark banner via <picture>)
 
 Given README.md exists
 When  grep -E "youtube\.com/watch\?v=|youtu\.be/|vimeo\.com/" README.md runs
-Then  exactly one demo video link is present (Devpost submission requirement per ../../../context/01-prizes-tracks.md)
+Then  exactly one demo video link is present (Devpost submission requirement per ../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md)
 
 Given README.md exists
 When  grep -E "architecture_diagram\.png|architecture_diagram_dark\.png" README.md runs
-Then  both names appear (light + dark; the file at repo root is the canonical submission artifact per ../../../context/01-prizes-tracks.md)
+Then  both names appear (light + dark; the file at repo root is the canonical submission artifact per ../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md)
 
 Given README.md exists
 When  awk '/^## Quick install/,/^## /' README.md | grep -cE "^(git clone|uv add|splunk install|pip install|curl)" runs
@@ -96,7 +96,7 @@ Then  the line count is between 80 and 200 (scannable, single screen + a bit —
 
 Given the LICENSE file at repo root is Apache-2.0
 When  github-linguist or GitHub's license-detect heuristic processes the repo
-Then  License is recognized as Apache-2.0 (Devpost auto-detect requirement per ../../../context/01-prizes-tracks.md)
+Then  License is recognized as Apache-2.0 (Devpost auto-detect requirement per ../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md)
 ```
 
 ---
@@ -175,8 +175,8 @@ All blocks must exit 0 before opening the PR.
 
 ## Notes for coding agent
 
-- Per `../../../context/01-prizes-tracks.md`, the README must include setup + run instructions, a public license (auto-detectable by GitHub — Apache-2.0 LICENSE already present at root), and link to the demo video and architecture diagram. These are pass/fail Stage One submission gates — missing any of them gets the project cut before scoring.
-- Per `../../../context/01-prizes-tracks.md`, the demo video must be hosted on YouTube/Vimeo/Youku and be under 3 minutes. Use a real YouTube URL once `story-demo-01-screencast-and-script.md` produces the upload; until then, embed a placeholder URL of the form `https://youtube.com/watch?v=AEGIS_DEMO_PENDING` so the BDD check still passes and the orchestrator's `sahil-pr-audit` flags it before merge to main.
+- Per `../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md`, the README must include setup + run instructions, a public license (auto-detectable by GitHub — Apache-2.0 LICENSE already present at root), and link to the demo video and architecture diagram. These are pass/fail Stage One submission gates — missing any of them gets the project cut before scoring.
+- Per `../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md`, the demo video must be hosted on YouTube/Vimeo/Youku and be under 3 minutes. Use a real YouTube URL once `story-demo-01-screencast-and-script.md` produces the upload; until then, embed a placeholder URL of the form `https://youtube.com/watch?v=AEGIS_DEMO_PENDING` so the BDD check still passes and the orchestrator's `sahil-pr-audit` flags it before merge to main.
 - Per `../../../context/11-prior-art/01-build-a-thon-2025-deep-read.md`, DNS Guard AI (Splunkbase 7922, 1st-place AI/ML winner 2025) shipped a `Images/banners/` folder containing `banner.png`, `banner.gif`, `banner.mp4`, `thumbnail.png`, plus `Images/architecture/` containing `architecture.png` + `architecture_dark.png`. Mirror the light+dark dual-variant pattern verbatim — judges remember this exact look-and-feel.
 - Per `../../../context/sources/docs-saved/splunk-cloud-live-verification-2026-06-02.md`, MCP Watch (Splunkbase app 8765, 17 downloads, by Alper Keske, released 2026-05) is the closest live shipping competitor for the audit surface — credit it explicitly in the README's credits section by name + Splunkbase number ("MCP Watch (Splunkbase 8765)") so the differentiation Aegis claims (runtime gating across Surfaces 1+2+3, which MCP Watch does not ship) is reviewable.
 - Per `../../../context/sources/docs-saved/splunk-cloud-live-verification-2026-06-02.md`, Cisco Security Cloud Splunkbase app 7404 v3.6.6 (Cisco Systems Inc., 55,544 downloads, released 2026-06-02) already populates `cisco_ai_defense:*` sourcetypes — credit it by name + Splunkbase number ("Cisco Security Cloud (Splunkbase 7404)") so the sourcetype-namespace ADR-005 design choice is auditable from the README.
@@ -184,7 +184,7 @@ All blocks must exit 0 before opening the PR.
 - The eval-table transclusion pattern is the standard `<!-- BEGIN x -->` / `<!-- END x -->` HTML-comment markers that `scripts/inline_eval_table.sh` regex-matches. `eval/src/aegis_eval/report.py` (from story-eval-05) writes the same markers in `docs/eval-results.md`. The CI workflow `.github/workflows/eval.yml` (already exists from story-cicd-06) calls `inline_eval_table.sh` and commits the result on `main` only. PRs see stale tables; main always has fresh ones.
 - Banner dimensions 1280×640 mirror DNS Guard's exact pixel size — preserves the visual cue judges associate with the 2025 winner. The DNS Guard `Images/banners/banner.png` is the literal reference; do not invent a different size.
 - The Pillow generator must run without external network — Devpost judges build the repo from a clean checkout and we cannot assume an internet round-trip works during their review.
-- Do NOT embed any Splunk or Cisco logo bitmaps. Devpost § "No unlicensed third-party trademarks" rule per `../../../context/01-prizes-tracks.md`. The banner is text + abstract gradient only.
+- Do NOT embed any Splunk or Cisco logo bitmaps. Devpost § "No unlicensed third-party trademarks" rule per `../../../research/splunk-agentic-ops-2026/01-prizes-tracks.md`. The banner is text + abstract gradient only.
 - Do NOT shorten the credits paragraph by collapsing names. Every incumbent must be spelled out — the BDD `grep -qF` checks are exact-substring matches.
 - This story's eval-table is the headline of the submission per `docs/eval-spec.md` § "Why this matters" — Technological Implementation is the tiebreaker criterion. The README's eval-table block is the single most-scored artifact in the entire repo.
 - If `docs/eval-results.md` ships with `mock=true` annotations (because story-eval-05 ran with `AEGIS_AI_DEFENSE_MOCK=true`), the README's transcluded table inherits those annotations — this is correct per `docs/eval-spec.md` § "Honesty bar" and is NOT a story-readme-01 failure.

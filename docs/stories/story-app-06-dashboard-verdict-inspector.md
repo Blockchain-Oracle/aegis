@@ -73,7 +73,7 @@ Given the XML file
 When  wc -l runs
 Then  output <= 400
 
-Given URL params are passed as ?form.time.earliest=-1h&form.rule=PII (deep-link pattern from Dashboard 1)
+Given URL params are passed as ?form.input_time.earliest=-1h&form.input_rule=PII (deep-link pattern from Dashboard 1)
 When  the dashboard loads
 Then  the input_time and input_rule values reflect the URL params (Splunk Dashboard Studio v2 default URL-binding)
 
@@ -147,7 +147,7 @@ if [ -n "${AEGIS_SPLUNK_HOST:-}" ]; then
 from playwright.sync_api import sync_playwright
 import os
 base = f"https://{os.environ['AEGIS_SPLUNK_HOST']}:8000/en-US/app/aegis_app/verdict_inspector"
-url = f"{base}?form.time.earliest=-24h&form.rule=PII"
+url = f"{base}?form.input_time.earliest=-24h&form.input_rule=PII"
 with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(ignore_https_errors=True); page = ctx.new_page()
     errors = []
@@ -194,7 +194,7 @@ All six blocks must exit 0 before opening the PR (block 5 gated on env var).
 - The "Open in Splunk ES" button URL pattern is documented in `../../../context/05-splunk-core/01-enterprise-security-architecture.md`: `/app/SplunkEnterpriseSecuritySuite/investigation_workbench?form.search=trace_id%3D<value>`. Verify the URL pattern works against Abu's Splunk Cloud instance with ES installed before finalizing.
 - Related-events query: `` `aegis_data` trace_id="$row_trace_id$" | sort _time | table _time, surface, verdict_label, severity, rules ``. This shows the agent's session timeline across all four surfaces — middleware, MCP, DefenseClaw — that share the same trace_id (via OTel trace propagation per story-core-03).
 - Filter inputs bind to the verdict_table query via tokens: `` `aegis_data` $input_severity$ $input_verdict_label$ $input_agent_id$ $input_rule$ ``. Each input emits a fragment (e.g., `input_severity` emits `severity=HIGH` or `` (empty) ``); the table query interpolates them. Dashboard Studio v2 supports this via the `defaults` block and per-input `prefix`/`suffix` formatting.
-- URL deep-link binding: Splunk Dashboard Studio v2 reads `?form.<input_name>=<value>` from URL automatically when input names match. So `?form.input_time.earliest=-1h&form.input_rule=PII` (from Dashboard 1 drill-down in story app-05) pre-populates the filter bar. Note: the drill-down URL in story app-05 must use the input name (`input_rule`), not the shorter `rule` form — fix story-app-05 in this story's PR if the names disagree.
+- URL deep-link binding: Splunk Dashboard Studio v2 reads `?form.<input_name>=<value>` from URL automatically when input names match. The contract with story-app-05's Dashboard 1 drill-down is: app-05 emits `?form.input_time.earliest=$row._time$&form.input_rule=$row.rule$` (using the verbatim destination input NAMES `input_time` and `input_rule`); this dashboard's inputs are declared with those exact names. Resolved as of the audit fix on 2026-06-03 — both stories use the canonical `input_<name>` URL key.
 - Do NOT use Classic Simple XML `<form>` syntax — this dashboard is fully Dashboard Studio v2. Mixing the two breaks the JSON parser.
 - Per `docs/ux-spec.md` § "Banned patterns", do NOT add custom CSS for "slide-in animation polish" — Splunk's default transition is good enough and custom CSS triggers the AppInspect "design-system fighting" flag.
 - If the JSON-in-XML file approaches 400 LOC, the safest split is to move the `dataSources` block to a sibling view via `<view ref="verdict_inspector_datasources" />`. Visualizations and inputs stay in the main file because their references to dataSources are by ID, not by inline definition.

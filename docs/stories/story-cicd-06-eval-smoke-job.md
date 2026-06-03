@@ -2,7 +2,7 @@
 
 **ID:** story-cicd-06-eval-smoke-job
 **Epic:** EPIC-01 — CI/CD foundation
-**Depends on:** story-cicd-02-test-pipeline-pytest-respx
+**Depends on:** story-skel-01-uv-workspace-pyproject, story-cicd-02-test-pipeline-pytest-respx
 **Estimate:** ~1.5h
 **Status:** PENDING
 
@@ -21,8 +21,8 @@
 Exact files the coding agent creates or modifies for this story:
 
 - `.github/workflows/ci.yml` — UPDATE — append the `eval-smoke` job. Copy verbatim from `docs/cicd-spec.md` § "Concrete YAML skeleton" lines 141-151. `needs: [test]`, `timeout-minutes: 10` (script itself targets <60s; 10-min ceiling is for cold-start + uv sync overhead). Pass `AEGIS_AI_DEFENSE_MOCK=true` env var.
-- `eval/pyproject.toml` — NEW — uv-workspace package metadata for the `eval` package (no runtime deps yet; dev deps from root). Listed as workspace member by cicd-01.
-- `eval/src/aegis_eval/__init__.py` — NEW — `__version__ = "0.0.0"` placeholder
+- `eval/pyproject.toml` — PRECONDITION (owned NEW by story-skel-01) — uv-workspace package metadata for the `eval` package. Listed as workspace member by skel-01.
+- `eval/src/aegis_eval/__init__.py` — PRECONDITION (owned NEW by story-skel-01) — package marker
 - `eval/scripts/__init__.py` — NEW — empty
 - `eval/scripts/smoke.py` — NEW — runnable Python module (~150-200 LOC, under cap) that: (1) loads `eval/data/smoke_prompts.jsonl` (~20 prompts, each with `prompt`, `expected_verdict`, `expected_severity` fields); (2) for each prompt, calls a stub `judge(prompt) -> Verdict` function that wraps a respx-mocked HTTP call to the AI Defense Inspection API (mock URL `https://us.api.inspect.aidefense.security.cisco.com/v1/inspect`); (3) compares the returned `verdict` + `severity` against expected; (4) emits a JSON summary `{"total": 20, "pass": N, "fail": M, "duration_s": T}` to stdout; (5) exits 0 if `fail == 0 and duration_s < 60`, else exits 1. Honors `AEGIS_AI_DEFENSE_MOCK=true` (which is the only mode this story supports — live mode is a `NotImplementedError` here; EPIC-10 wires live mode).
 - `eval/data/smoke_prompts.jsonl` — NEW — exactly 20 JSON-lines records. Sourced from: 10 from JailbreakBench `behaviors` subset (per `../../../context/01-threat-landscape/02-jailbreak-techniques.md`), 5 hand-curated PII leak prompts (`../../../context/01-threat-landscape/04-pii-and-data-leak-mechanics.md`), 5 benign prompts (negative controls). Each record: `{"id": "smoke-NNN", "prompt": "...", "expected_verdict": "BLOCK|ALLOW|MODIFY", "expected_severity": "HIGH|LOW|NONE_SEVERITY|MEDIUM", "category": "jailbreak|pii|benign"}`.

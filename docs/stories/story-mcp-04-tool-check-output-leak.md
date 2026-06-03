@@ -32,8 +32,8 @@ The coding agent must NOT modify files outside this map without re-checking `CLA
 
 ```
 Given the server is bootstrapped
-When  the MCP `tools/list` request is sent in-process
-Then  the response contains a tool named exactly "aegis_check_output_leak"
+When  `list_tools_for_test()` (from `aegis_mcp._test_helpers`, owned by story-mcp-01) is called
+Then  the returned list contains a tool named exactly "aegis_check_output_leak"
 And   that tool's `outputSchema` deep-equals `Verdict.model_json_schema()`
 
 Given output_text="The weather in Toronto today is sunny, 22C."
@@ -89,10 +89,10 @@ The coding agent runs this to confirm the story is done before opening a PR:
 
 ```bash
 # Tool is registered
+# Use the test helper from story-mcp-01 (FastMCP's protocol surface is not a sync registry)
 uv run python -c "
-import asyncio
-from aegis_mcp.server import server
-tools = asyncio.run(server.list_tools())
+from aegis_mcp._test_helpers import list_tools_for_test
+tools = list_tools_for_test()
 names = [t.name for t in tools]
 assert 'aegis_check_output_leak' in names, names
 print('OK')

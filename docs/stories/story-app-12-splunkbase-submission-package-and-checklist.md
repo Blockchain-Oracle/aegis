@@ -11,7 +11,7 @@
 ## User story
 
 **As a** Splunk Build-a-thon-style judge who wants to see Aegis's Splunk app installed locally to demo it
-**I want to** run a single `scripts/build_splunk_app_tgz.sh` invocation that produces a Splunkbase-ready `.tar.gz` artifact in `dist/aegis_app-<version>.tar.gz` matching the conventions in `../../../context/05-splunk-core/08-app-packaging-and-conf-files.md`, and read `docs/splunkbase-submission-checklist.md` to confirm every Splunkbase requirement is met
+**I want to** run a single `scripts/build_splunk_app_tgz.sh` invocation that produces a Splunkbase-ready `.tgz` artifact in `dist/aegis_app-<version>.tgz` matching the conventions in `../../../context/05-splunk-core/08-app-packaging-and-conf-files.md`, and read `docs/splunkbase-submission-checklist.md` to confirm every Splunkbase requirement is met
 **So that** Splunkbase submission is unblocked post-hackathon and the build artifact is reproducible from the repo — the submission itself is OPTIONAL for the hackathon but the artifact is required per the spec
 
 ---
@@ -20,12 +20,12 @@
 
 Exact files the coding agent creates or modifies for this story:
 
-- `scripts/build_splunk_app_tgz.sh` — NEW — bash script: validates `splunk_apps/aegis_app/default/app.conf` has a `version = X.Y.Z` line (semver), reads that version, strips dev cruft (`__pycache__/`, `.pytest_cache/`, `*.pyc`, `.DS_Store`, `tests/`, `.appinspect.*.yaml.bak`, `appinspect-report.json`, etc.), runs AppInspect once (via story-app-11's `run_appinspect.sh`) to confirm zero-error pre-flight, then creates `dist/aegis_app-<version>.tar.gz` via `tar -czf dist/aegis_app-<version>.tar.gz -C splunk_apps aegis_app/` from the repo root. Computes and prints sha256 + size of the resulting artifact. Exit 1 if app.conf version line is missing or non-semver, or if AppInspect fails.
+- `scripts/build_splunk_app_tgz.sh` — NEW — bash script: validates `splunk_apps/aegis_app/default/app.conf` has a `version = X.Y.Z` line (semver), reads that version, strips dev cruft (`__pycache__/`, `.pytest_cache/`, `*.pyc`, `.DS_Store`, `tests/`, `.appinspect.*.yaml.bak`, `appinspect-report.json`, etc.), runs AppInspect once (via story-app-11's `run_appinspect.sh`) to confirm zero-error pre-flight, then creates `dist/aegis_app-<version>.tgz` via `tar -czf dist/aegis_app-<version>.tgz -C splunk_apps aegis_app/` from the repo root. Computes and prints sha256 + size of the resulting artifact. Exit 1 if app.conf version line is missing or non-semver, or if AppInspect fails.
 - `scripts/_strip_dev_cruft.sh` — NEW — bash helper invoked by `build_splunk_app_tgz.sh` that walks `splunk_apps/aegis_app/` and removes dev-only files (listed in a stable inline allowlist of patterns) before packaging. Idempotent. Logs which files were removed.
 - `splunk_apps/aegis_app/META-INF/manifest.json` — NEW — Splunk-standard app manifest per `../../../context/05-splunk-core/08-app-packaging-and-conf-files.md`. Fields per the documented schema (see Notes): `schemaVersion`, `info.id`, `info.title`, `info.version`, `info.author`, `info.license`, `info.releaseDate`, `info.description`, `info.classification.intendedAudience`, `info.classification.categories`, `info.classification.developmentStatus`, `dependencies`, `targetWorkloads` (`["_search_head_instances"]`). Match the `app.conf` version field exactly.
 - `docs/splunkbase-submission-checklist.md` — NEW — markdown document containing the full Splunkbase submission checklist: (1) AppInspect green, (2) `manifest.json` present and valid, (3) `README` (extension-less) at app root, (4) `LICENSE` references Apache-2.0, (5) `static/appIcon*.png` icons present in 4 sizes per story-app-09, (6) `default/data/ui/nav/default.xml` exists, (7) signing manifest (if Splunkbase requires — see Notes), (8) eval results table referenced in README, (9) demo video URL, (10) supported Splunk versions verified against `app.conf`. Each item has a verification command and an expected output.
 - `scripts/verify_splunkbase_artifact.sh` — NEW — runs the artifact end-to-end checks: extracts the tarball to a temp dir, runs `splunk-appinspect inspect <extracted>/aegis_app --included-tags cloud`, validates manifest.json schema (Pydantic model `eval/.../manifest_schema.py` or inline Python), checks for the required README + LICENSE files in the extracted tree. Exit 0 if all pass. Used by `release.yml` (story-cicd-08).
-- `tests/test_build_artifact.py` — NEW (at repo root tests dir, per existing CI pattern) — ≥ 10 tests: `build_splunk_app_tgz.sh` produces `dist/aegis_app-<version>.tar.gz`; the produced archive contains `aegis_app/default/app.conf`; contains `aegis_app/README`; contains `aegis_app/META-INF/manifest.json`; does NOT contain `__pycache__/` or `*.pyc`; does NOT contain `tests/`; the version in `manifest.json` equals the version in `app.conf`; the version string matches semver regex; the script runs idempotently (second invocation produces an artifact with the same sha256); `verify_splunkbase_artifact.sh` exits 0 on a freshly built artifact.
+- `tests/test_build_artifact.py` — NEW (at repo root tests dir, per existing CI pattern) — ≥ 10 tests: `build_splunk_app_tgz.sh` produces `dist/aegis_app-<version>.tgz`; the produced archive contains `aegis_app/default/app.conf`; contains `aegis_app/README`; contains `aegis_app/META-INF/manifest.json`; does NOT contain `__pycache__/` or `*.pyc`; does NOT contain `tests/`; the version in `manifest.json` equals the version in `app.conf`; the version string matches semver regex; the script runs idempotently (second invocation produces an artifact with the same sha256); `verify_splunkbase_artifact.sh` exits 0 on a freshly built artifact.
 - `splunk_apps/aegis_app/LICENSE` — NEW (or symlink) — Apache-2.0 license file at the app root (required by Splunkbase per the submission checklist).
 
 The coding agent must NOT modify files outside this map without re-checking `CLAUDE.md`.
@@ -47,18 +47,18 @@ Then  manifest.json's info.version equals app.conf's `version =` value byte-equa
 Given `bash scripts/build_splunk_app_tgz.sh` runs from the repo root
 When  it completes
 Then  exit code is 0
-And   a single tarball matching `dist/aegis_app-*.tar.gz` exists
+And   a single tarball matching `dist/aegis_app-*.tgz` exists
 And   the printed sha256 is a 64-character hex string
 
 Given the produced tarball
-When  `tar -tzf dist/aegis_app-*.tar.gz | head -20` runs
+When  `tar -tzf dist/aegis_app-*.tgz | head -20` runs
 Then  the listing includes `aegis_app/default/app.conf`
 And   includes `aegis_app/README`
 And   includes `aegis_app/META-INF/manifest.json`
 And   does not include `__pycache__`, `*.pyc`, `.DS_Store`, or `tests/`
 
 Given the produced tarball
-When  `bash scripts/verify_splunkbase_artifact.sh dist/aegis_app-*.tar.gz` runs
+When  `bash scripts/verify_splunkbase_artifact.sh dist/aegis_app-*.tgz` runs
 Then  exit code is 0
 
 Given the build script is run twice on a clean tree
@@ -123,12 +123,12 @@ head -5 splunk_apps/aegis_app/LICENSE | grep -q 'Version 2.0'
 chmod +x scripts/build_splunk_app_tgz.sh
 rm -rf dist
 bash scripts/build_splunk_app_tgz.sh
-sha_a=$(find dist -name 'aegis_app-*.tar.gz' -exec sha256sum {} \; | awk '{print $1}')
-n=$(find dist -name 'aegis_app-*.tar.gz' | wc -l)
+sha_a=$(find dist -name 'aegis_app-*.tgz' -exec sha256sum {} \; | awk '{print $1}')
+n=$(find dist -name 'aegis_app-*.tgz' | wc -l)
 [ "$n" -eq 1 ] || { echo "FAIL: expected 1 tarball, got $n"; exit 1; }
 
 # 4. Tarball contents are clean
-artifact=$(find dist -name 'aegis_app-*.tar.gz' | head -1)
+artifact=$(find dist -name 'aegis_app-*.tgz' | head -1)
 tar -tzf "$artifact" | grep -q 'aegis_app/default/app.conf'
 tar -tzf "$artifact" | grep -q 'aegis_app/README'
 tar -tzf "$artifact" | grep -q 'aegis_app/META-INF/manifest.json'
@@ -141,7 +141,7 @@ bash scripts/verify_splunkbase_artifact.sh "$artifact"
 # 6. Deterministic — second build produces same sha256
 rm -rf dist
 bash scripts/build_splunk_app_tgz.sh
-sha_b=$(find dist -name 'aegis_app-*.tar.gz' -exec sha256sum {} \; | awk '{print $1}')
+sha_b=$(find dist -name 'aegis_app-*.tgz' -exec sha256sum {} \; | awk '{print $1}')
 [ "$sha_a" = "$sha_b" ] || { echo "FAIL: non-deterministic build: $sha_a vs $sha_b"; exit 1; }
 
 # 7. Checklist doc mentions every required item

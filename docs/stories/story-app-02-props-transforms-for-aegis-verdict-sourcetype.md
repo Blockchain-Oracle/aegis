@@ -100,7 +100,7 @@ grep -q 'cisco_ai_defense_family' splunk_apps/aegis_app/default/tags.conf
 
 # 5. Round-trip via local Splunk container (gated by AEGIS_SPLUNK_HEC_TOKEN)
 if [ -n "${AEGIS_SPLUNK_HEC_TOKEN:-}" ]; then
-  uv run python scripts/emit_sample_verdict.py | \
+  uv run python Synthetic-Data/scripts/emit_sample_verdict.py | \
     curl -k -H "Authorization: Splunk ${AEGIS_SPLUNK_HEC_TOKEN}" \
       -d @- "${AEGIS_SPLUNK_HEC_URL}/services/collector/event"
   sleep 5  # indexer lag
@@ -149,4 +149,4 @@ All seven blocks must exit 0 before opening the PR (block 5 is conditional on en
 - `eventtypes.conf` triggers from sourcetype only (not from index) so the dashboards work whether the deployment routes Aegis events to `main`, `cisco_ai_defense`, or a dedicated `aegis` index. Sourcetype is the stable anchor.
 - The `tags.conf` `cisco_ai_defense_family` tag is what lets SOC analysts run unified searches like `tag=cisco_ai_defense_family severity=HIGH` across Cisco AI Defense + Aegis events. This is the "colocate for unified SOC search" claim from `docs/architecture.md` ADR-005.
 - Do NOT add `DELIMS`, `EXTRACT-`, or regex-based extractions to props.conf — JSON indexed-extractions handles all the lifting. Adding regex on top makes the conf file twice as long and slower at search time.
-- Sample event for round-trip testing should match the exact shape emitted by `aegis_core.otel.emit_event()` (story-core-02). The `scripts/emit_sample_verdict.py` referenced in shell block 5 lives outside this story's file modification map; if it doesn't exist yet, gate the block on `[ -f scripts/emit_sample_verdict.py ]`.
+- Sample event for round-trip testing should match the exact shape emitted by `aegis_core.otel.emit_event()` (story-core-02). The `Synthetic-Data/scripts/emit_sample_verdict.py` referenced in shell block 5 lives outside this story's file modification map; if it doesn't exist yet, gate the block on `[ -f Synthetic-Data/scripts/emit_sample_verdict.py ]`.
