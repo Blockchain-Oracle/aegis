@@ -92,8 +92,10 @@ stories:
     depends_on: [story-core-01-verdict-pydantic-types]
   - id: story-core-03-error-model-and-trace-propagation
     epic: "EPIC-03 — Core domain types"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-core-01-verdict-pydantic-types]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/75"
+    merged_at: "2026-06-03T12:15:00Z"
   - id: story-core-04-structlog-config-and-conventions
     epic: "EPIC-03 — Core domain types"
     status: PENDING
