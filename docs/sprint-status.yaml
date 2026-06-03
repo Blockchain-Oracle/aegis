@@ -33,8 +33,10 @@ stories:
     merged_at: "2026-06-03T09:50:00Z"
   - id: story-cicd-04-pre-commit-hooks
     epic: "EPIC-01 — CI/CD foundation"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-cicd-03-loc-cap-enforcement]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/71"
+    merged_at: "2026-06-03T10:15:00Z"
   - id: story-cicd-05-appinspect-gate
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
