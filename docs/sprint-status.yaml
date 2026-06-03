@@ -81,8 +81,11 @@ stories:
   # EPIC-03 — Core domain types
   - id: story-core-01-verdict-pydantic-types
     epic: "EPIC-03 — Core domain types"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-skel-02-ruff-mypy-config]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/74"
+    merged_at: "2026-06-03T11:50:00Z"
+    notes: "First product-code PR. 33 tests, 100% coverage on verdict.py + verdict_context.py."
   - id: story-core-02-otel-evaluation-event-emitter
     epic: "EPIC-03 — Core domain types"
     status: PENDING
