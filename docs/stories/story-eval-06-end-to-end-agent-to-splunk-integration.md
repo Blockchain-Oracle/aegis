@@ -25,7 +25,11 @@ Exact files the coding agent creates or modifies for this story:
 - `eval/scripts/tests/__init__.py` — NEW — empty marker.
 - `eval/scripts/tests/test_e2e_demo.py` — NEW — ≥ 8 behavioral tests: (1) `--help` exits 0 and lists `--prompt`/`--profile`/`--timeout`/`--earliest`; (2) missing-env-var path returns exit 4 with a message naming the missing var; (3) the default prompt equals the verbatim PRD payload (literal string match); (4) with `respx` mocking the HEC endpoint AND `splunklib.client` faked via dependency injection, the happy path returns exit 0; (5) a prompt that does NOT trigger Aegis (e.g., `"Hello"`) returns exit 1; (6) when HEC succeeds but the SPL query never returns within `--timeout 1`, exit is 2; (7) when the SPL result row's `verdict_label != "BLOCK"`, exit is 3; (8) the captured `trace_id` flows through to the SPL query string verbatim.
 - `eval/scripts/README.md` — UPDATE (or NEW if not present from eval-01) — append a "End-to-end demo dress rehearsal" section: when to run, env-var prerequisites, expected exit codes, integration with `story-demo-01` screencast.
-- `docs/sprint-status.yaml` — UPDATE (handled by parent batch task — not edited here directly by this story's agent; documented here so the coding agent knows the dependency graph is recorded).
+<!-- Note: `docs/sprint-status.yaml` is NOT in this story's file modification map. The
+sprint-status entry for story-eval-06 was added by the audit-synthesis pass (commit 19aef0e)
+when the story file was created; the coding agent for this story does NOT touch
+sprint-status.yaml. Listed here in a comment for orchestrator awareness only. -->
+
 
 The coding agent must NOT modify files outside this map without re-checking `CLAUDE.md`. In particular: **do not** modify `support_agent.py` from `story-mw-07` (this story consumes it); **do not** add a new HEC exporter (this story consumes `story-core-05`'s); **do not** mock the AI Defense API in this script — it must run against the configured live (or env-toggled mock) judge chain from `story-judges-05`.
 

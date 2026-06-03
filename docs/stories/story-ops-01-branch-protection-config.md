@@ -33,16 +33,17 @@ The coding agent must NOT modify files outside this map without re-checking `CLA
 
 ```
 Given docs/ops/branch-protection.md exists
-When  `grep -cF 'cisco_ai_defense:aegis_verdict\|status check' docs/ops/branch-protection.md` runs
-Then  the file is non-empty
+When  `grep -c 'status check' docs/ops/branch-protection.md` runs
+Then  the count is ≥ 1 (the doc references "status check" by name)
 
 Given docs/ops/branch-protection.md exists
 When  the file is grepped for each of the 14 required status check names
 Then  every name (lint, typecheck, loc-cap, test (aegis_core), test (aegis_judges), test (aegis_mw), test (aegis_mcp), appinspect, eval-smoke, build-wheels, build-app, pip-audit, gitleaks, trivy) appears at least once
 
 Given docs/ops/branch-protection.md exists
-When  `grep -c 'allow_force_pushes\|allow_deletions\|enforce_admins\|required_conversation_resolution' docs/ops/branch-protection.md` runs
-Then  count ≥ 4
+When  the file is grepped for each setting key in turn
+Then  every one of `allow_force_pushes`, `allow_deletions`, `enforce_admins`, `required_conversation_resolution` appears at least once
+(Verify per-key — do NOT use `grep -F` with `\|` because `-F` treats backslash-pipe as literal characters, not alternation. Either loop the 4 keys with `-c` per key, or use plain `grep -cE` for extended-regex alternation.)
 
 Given scripts/configure_branch_protection.sh exists and is executable
 When  `bash scripts/configure_branch_protection.sh -n` runs without GH_OWNER/GH_REPO env

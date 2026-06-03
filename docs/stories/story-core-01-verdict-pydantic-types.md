@@ -168,7 +168,11 @@ grep -rE "(mock|fake|dummy|hardcoded|simulated)" packages/aegis_core/src/ --incl
   class RuleHit(BaseModel):
       rule: str
       confidence: float = Field(ge=0.0, le=1.0)
-      source: Literal["ai_defense", "defenseclaw_regex", "splunklib_security", "foundation_sec_classifier"]
+      source: Literal["ai_defense", "defenseclaw_regex", "splunklib_security"]
+      # Per ADR-003 + the audit fix in architecture.md:272, Foundation-Sec NEVER appears in
+      # `source` — it generates `Verdict.explanation` only, never `RuleHit`. Adding
+      # `"foundation_sec_classifier"` here would silently re-introduce the off-label
+      # classifier usage ADR-003 explicitly forbids. Match the architecture spec verbatim.
 
   class Verdict(BaseModel):
       trace_id: UUID
