@@ -25,7 +25,7 @@ from splunklib.ai.middleware import (
 )
 
 from aegis_mw.config import Config
-from aegis_mw.profiles import DEFAULT_PROFILE, Profile
+from aegis_mw.profiles import Profile
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -131,6 +131,3 @@ class SafetyAgentMiddleware(_SafetyMiddlewareBase):
     ) -> "AgentResponse[object]":
         """Pass-through stub; real logic in story-mw-06."""
         return await handler(request)
-
-
-_ = DEFAULT_PROFILE  # Re-export sentinel — kept reachable for type-checker discovery.

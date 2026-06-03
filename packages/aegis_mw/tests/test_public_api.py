@@ -10,7 +10,6 @@ modifying the response.
 import aegis_mw
 import pytest
 from aegis_mw import (
-    DEFAULT_PROFILE,
     Config,
     Profile,
     SafetyAgentMiddleware,
@@ -18,9 +17,12 @@ from aegis_mw import (
     SafetySubagentMiddleware,
     SafetyToolMiddleware,
 )
+from aegis_mw.profiles import DEFAULT_PROFILE
 from pydantic import SecretStr
+from splunklib.ai.messages import AgentResponse
 from splunklib.ai.middleware import (
     AgentMiddleware,
+    AgentRequest,
     ModelRequest,
     ModelResponse,
     SubagentRequest,
@@ -50,10 +52,9 @@ def test_each_middleware_is_subclass_of_splunklib_ai_agent_middleware() -> None:
 
 
 def test_public_api_all_is_exactly_locked() -> None:
-    """__all__ contract — extending requires intentional update."""
+    """__all__ contract — exactly 6 names per spec line 50; extending requires intentional update."""
     assert sorted(aegis_mw.__all__) == [
         "Config",
-        "DEFAULT_PROFILE",
         "Profile",
         "SafetyAgentMiddleware",
         "SafetyModelMiddleware",
@@ -170,4 +171,17 @@ async def test_subagent_middleware_stub_delegates_to_handler() -> None:
         return sentinel  # type: ignore[return-value]
 
     result = await instance.subagent_middleware(object(), handler)  # type: ignore[arg-type]
+    assert result is sentinel
+
+
+@pytest.mark.asyncio
+async def test_agent_middleware_stub_delegates_to_handler() -> None:
+    """Symmetry with the other three — no class left untested."""
+    instance = SafetyAgentMiddleware(profile="default")
+    sentinel = object()
+
+    async def handler(_request: AgentRequest) -> AgentResponse[object]:
+        return sentinel  # type: ignore[return-value]
+
+    result = await instance.agent_middleware(object(), handler)  # type: ignore[arg-type]
     assert result is sentinel

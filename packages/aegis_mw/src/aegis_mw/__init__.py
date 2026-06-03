@@ -7,11 +7,10 @@ from aegis_mw._base import (
     SafetyToolMiddleware,
 )
 from aegis_mw.config import Config
-from aegis_mw.profiles import DEFAULT_PROFILE, Profile
+from aegis_mw.profiles import Profile
 
 __version__ = "0.1.0"
 __all__ = [
-    "DEFAULT_PROFILE",
     "Config",
     "Profile",
     "SafetyAgentMiddleware",
