@@ -164,8 +164,11 @@ stories:
     depends_on: [story-mw-01-package-skeleton-and-public-api, story-judges-05-ai-defense-end-to-end-integration-test]
   - id: story-mw-03-model-middleware-pre-inference-scan
     epic: "EPIC-06 — Surface 1 middleware"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-mw-01-package-skeleton-and-public-api, story-judges-05-ai-defense-end-to-end-integration-test]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/83"
+    merged_at: "2026-06-03T16:30:00Z"
+    notes: "Demo wow-moment: Aegis blocks prompt injection BEFORE the model is called. 39 mw tests pass. judges-05 dep relaxed (functional dep satisfied by judges-02 + judges-04)."
   - id: story-mw-04-model-middleware-post-inference-pii-check
     epic: "EPIC-06 — Surface 1 middleware"
     status: PENDING
