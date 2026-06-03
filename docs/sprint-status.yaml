@@ -153,8 +153,11 @@ stories:
   # EPIC-06 — Surface 1 (middleware library)
   - id: story-mw-01-package-skeleton-and-public-api
     epic: "EPIC-06 — Surface 1 middleware"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-core-01-verdict-pydantic-types]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/82"
+    merged_at: "2026-06-03T16:00:00Z"
+    notes: "First EPIC-06 PR. 4 middleware stubs verified against splunklib.ai 3.0.0 contract."
   - id: story-mw-02-tool-middleware-with-defenseclaw-args
     epic: "EPIC-06 — Surface 1 middleware"
     status: PENDING
