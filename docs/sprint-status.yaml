@@ -296,8 +296,11 @@ stories:
     depends_on: [story-app-03-savedsearches-and-mltk-macros, story-app-04-collections-conf-kvstore-verdict-history]
   - id: story-app-08-risk-factors-conf-es-rba-integration
     epic: "EPIC-09 — Surface 4 Splunk app"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-app-03-savedsearches-and-mltk-macros]
+    pr_url: "https://github.com/Blockchain-Oracle/aegis/pull/100"
+    merged_at: "2026-06-05T12:14:12Z"
+    notes: "ES Risk-Based Alerting integration. 11 per-rule scoring stanzas (40-70) verbatim Cisco AI Defense rule names + HIGH multiplier (×2) + whitelist exclusion (×0) + correlation alert wiring. Multi-reviewer pass (code-reviewer + comment-analyzer + silent-failure-hunter) caught CRITICAL S1: agent_id was never emitted on Verdict OTel events, silently breaking dashboards in app-05/06 AND RBA in app-08. Fixed in-PR via Verdict.agent_id field + otel.py emission + FIELDALIAS-agent_id. Middleware-side population (request.thread_id → Verdict.agent_id) tracked as story-mw-09 (issue #101). Also closed S10 (fillnull UNMAPPED on atlas lookup miss) + comment-analyzer ATLAS asymmetry nit. S2-S9 hardening backlog tracked as issue #102."
   - id: story-app-09-static-icons-and-app-assets
     epic: "EPIC-09 — Surface 4 Splunk app"
     status: PENDING
