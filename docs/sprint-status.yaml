@@ -289,7 +289,10 @@ stories:
     depends_on: [story-app-03-savedsearches-and-mltk-macros, story-app-04-collections-conf-kvstore-verdict-history]
   - id: story-app-07-dashboard-regulator-evidence-pack
     epic: "EPIC-09 — Surface 4 Splunk app"
-    status: PENDING
+    status: COMPLETE
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/99"
+    merged_at: "2026-06-06T03:30:00Z"
+    notes: "Examiner-grade audit dashboard. 8 visualizations including verbatim SR 26-2 footnote 3 + NIST RMF mapping + EU AI Act Article 6. Profile-gated HIPAA + PCI panels with showNoData empty-state explanation. Browser-print PDF export (pdfgen doesn't render DS-v2 universally). First PR to run the full multi-reviewer pattern (code-reviewer + comment-analyzer + silent-failure-hunter) — caught 6 bugs that would have shipped silently broken."
     depends_on: [story-app-03-savedsearches-and-mltk-macros, story-app-04-collections-conf-kvstore-verdict-history]
   - id: story-app-08-risk-factors-conf-es-rba-integration
     epic: "EPIC-09 — Surface 4 Splunk app"
