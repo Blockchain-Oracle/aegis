@@ -1,4 +1,4 @@
-<dashboard version="2.0" theme="dark">
+<dashboard version="2" theme="dark">
   <label>Aegis — Agent Risk Overview</label>
   <description>Real-time CISO view of AI agent safety verdicts. Aegis events land in the same cisco_ai_defense:* sourcetype family as the Cisco Security Cloud add-on (Splunkbase 7404), so SOC analysts get unified search.</description>
   <definition><![CDATA[
@@ -72,7 +72,8 @@
     "ds_msj": {
       "type": "ds.search",
       "options": {
-        "query": "`aegis_data` earliest=-7d | stats count(eval(severity!=\"NONE_SEVERITY\")) as detections count as total_msgs by agent_id | eval detection_rate=round(detections/total_msgs,4) | sort -total_msgs"
+        "query": "`aegis_data` | stats count(eval(severity!=\"NONE_SEVERITY\")) as detections count as total_msgs by agent_id | eval detection_rate=round(detections/total_msgs,4) | sort -total_msgs",
+        "queryParameters": {"earliest": "-7d", "latest": "now"}
       },
       "name": "ds_msj"
     }
@@ -123,7 +124,7 @@
           "type": "drilldown.event.click",
           "options": {
             "valid": true,
-            "uri": "/app/aegis_app/verdict_inspector?form.input_time.earliest=$row._time$&form.input_time.latest=$row._time$"
+            "uri": "/app/aegis_app/verdict_inspector?form.input_time.earliest=$click.x.value$&form.input_time.latest=$click.x.value$"
           }
         }
       ]
@@ -142,7 +143,7 @@
           "type": "drilldown.event.click",
           "options": {
             "valid": true,
-            "uri": "/app/aegis_app/verdict_inspector?form.input_time.earliest=$row._time$&form.input_rule=$row.rule$"
+            "uri": "/app/aegis_app/verdict_inspector?form.input_time.earliest=$click.x.value$&form.input_rule=$click.name2$"
           }
         }
       ]
@@ -151,7 +152,7 @@
       "type": "splunk.table",
       "title": "Top agents by BLOCK count",
       "dataSources": {"primary": "ds_top_agents"},
-      "options": {"rowNumbers": "true"},
+      "options": {"rowNumbers": true},
       "eventHandlers": [
         {
           "type": "drilldown.event.click",

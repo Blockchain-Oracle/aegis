@@ -20,7 +20,7 @@
 
 Exact files the coding agent creates or modifies for this story:
 
-- `splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml` — NEW — Dashboard Studio v2 dashboard in JSON-in-XML format. Wrapper: `<dashboard version="2.0" theme="dark"><label>Aegis — Agent Risk Overview</label><description>Real-time CISO view of AI agent safety verdicts. Aegis events land in the same cisco_ai_defense:* sourcetype family as the Cisco Security Cloud add-on (Splunkbase 7404).</description><definition><![CDATA[ {JSON} ]]></definition></dashboard>`. The CDATA JSON declares: 4 KPI single-value visualizations (`kpi_total_verdicts`, `kpi_block_verdicts`, `kpi_high_severity`, `kpi_distinct_agents`), 1 line chart with stacked verdicts (`ts_verdicts_24h`), 1 heatmap (`heatmap_rules_by_hour`), 1 table (`table_top_agents`), 1 small MSJ scaling line chart (`msj_scaling_chart`); 8 dataSources (one per viz), each `type: "ds.search"` using `aegis_data` macro + per-panel `| stats`/`| timechart`; 1 timerange input (`input_time`); layout block uses absolute positioning per Dashboard Studio v2 grid (12-column, panels sized 3/6/12 wide depending on KPI vs main vs full-width). All drill-downs point at `verdict_inspector` with URL params using the destination dashboard's input NAMES (`form.input_time.earliest=...&form.input_rule=...&form.input_agent_id=...`) — see story-app-06's input declarations at line 23. This is the resolved drilldown contract per the 2026-06-03 audit fix. File total: target ≤ 380 LOC; if approaching 400, split panel JSON into a 2nd view file via Splunk view-include (`<view ref="agent_risk_overview_panels">`).
+- `splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml` — NEW — Dashboard Studio v2 dashboard in JSON-in-XML format. Wrapper: `<dashboard version="2" theme="dark"><label>Aegis — Agent Risk Overview</label><description>Real-time CISO view of AI agent safety verdicts. Aegis events land in the same cisco_ai_defense:* sourcetype family as the Cisco Security Cloud add-on (Splunkbase 7404).</description><definition><![CDATA[ {JSON} ]]></definition></dashboard>`. The CDATA JSON declares: 4 KPI single-value visualizations (`kpi_total_verdicts`, `kpi_block_verdicts`, `kpi_high_severity`, `kpi_distinct_agents`), 1 line chart with stacked verdicts (`ts_verdicts_24h`), 1 heatmap (`heatmap_rules_by_hour`), 1 table (`table_top_agents`), 1 small MSJ scaling line chart (`msj_scaling_chart`); 8 dataSources (one per viz), each `type: "ds.search"` using `aegis_data` macro + per-panel `| stats`/`| timechart`; 1 timerange input (`input_time`); layout block uses absolute positioning per Dashboard Studio v2 grid (12-column, panels sized 3/6/12 wide depending on KPI vs main vs full-width). All drill-downs point at `verdict_inspector` with URL params using the destination dashboard's input NAMES (`form.input_time.earliest=...&form.input_rule=...&form.input_agent_id=...`) — see story-app-06's input declarations at line 23. This is the resolved drilldown contract per the 2026-06-03 audit fix. File total: target ≤ 380 LOC; if approaching 400, split panel JSON into a 2nd view file via Splunk view-include (`<view ref="agent_risk_overview_panels">`).
 - `splunk_apps/aegis_app/default/data/ui/nav/default.xml` — UPDATE — confirm `<view name="agent_risk_overview" default="true" />` is set as the default view (this is the landing dashboard).
 
 The coding agent must NOT modify files outside this map without re-checking CLAUDE.md.
@@ -35,8 +35,8 @@ When  python -c "import xml.etree.ElementTree as ET; ET.parse(...)" runs
 Then  exit code is 0 (well-formed XML)
 
 Given the XML file is parsed
-When  grep -E '^<dashboard version="2.0"' runs
-Then  exactly one match (Dashboard Studio v2 declared)
+When  grep -E '^<dashboard version="2"' runs
+Then  exactly one match (Dashboard Studio v2 declared — Splunk loader is strict, "2.0" silently fails to render)
 
 Given the XML file is parsed
 When  grep 'theme="dark"' runs
@@ -97,7 +97,7 @@ test -f splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml
 python -c "import xml.etree.ElementTree as ET; ET.parse('splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml')"
 
 # 2. Dashboard Studio v2 + dark theme declared
-grep -q '<dashboard version="2.0"' splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml
+grep -q '<dashboard version="2"' splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml
 grep -q 'theme="dark"' splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml
 grep -q '<label>Aegis — Agent Risk Overview</label>' splunk_apps/aegis_app/default/data/ui/views/agent_risk_overview.xml
 
@@ -178,7 +178,7 @@ All eleven blocks must exit 0 before opening the PR (block 10 gated on env var).
 ## Notes for coding agent
 
 - Per `docs/ux-spec.md` § "Dashboard 1 — Agent Risk Overview", the exact 5-section layout is: 4-KPI top strip, time-series verdicts-stacked-by-label, heatmap rules-by-hour, top-agents-by-BLOCK table, MSJ scaling indicator. Do not add or drop sections without re-reading the ux-spec.
-- Per `docs/architecture.md` § "ADR-008", we use Dashboard Studio v2 (JSON-in-XML) wrapped in the Classic Simple XML `<dashboard>` shell. The shell looks like: `<dashboard version="2.0" theme="dark"><label>...</label><description>...</description><definition><![CDATA[ {json} ]]></definition></dashboard>`. Anything outside the CDATA stays as XML; everything inside is Dashboard Studio v2 JSON spec.
+- Per `docs/architecture.md` § "ADR-008", we use Dashboard Studio v2 (JSON-in-XML) wrapped in the Classic Simple XML `<dashboard>` shell. The shell looks like: `<dashboard version="2" theme="dark"><label>...</label><description>...</description><definition><![CDATA[ {json} ]]></definition></dashboard>`. Anything outside the CDATA stays as XML; everything inside is Dashboard Studio v2 JSON spec.
 - Per `../../../context/05-splunk-core/07-dashboard-studio-v2.md`, Dashboard Studio v2's JSON spec requires top-level keys: `title`, `visualizations` (dict of named viz configs), `dataSources` (dict of named query configs), `inputs`, `defaults`, `layout`. Each visualization references `dataSources` by ID. Each `ds.search` dataSource has `options.query` (the SPL) and `options.earliestTime` / `options.latestTime` (token-bound to the timerange input).
 - Per `../../../context/11-prior-art/01-build-a-thon-2025-deep-read.md`, DNS Guard 1st-place winner used `theme="dark"` — judge pool rewarded the dark-mode Splunk-native look. Do not override to `theme="light"`.
 - Per `docs/ux-spec.md` § "Design tokens", do NOT add custom CSS, custom fonts, or `rounded-xl`-style styling. Splunk's design tokens handle color + spacing. Custom overrides defeat the Splunk-native winning pattern.
