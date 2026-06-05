@@ -205,3 +205,111 @@ def test_error_fixture_contains_at_least_one_error_result() -> None:
     data = json.loads((FIXTURES / "appinspect_error_report.json").read_text())
     results = {c["result"] for r in data["reports"] for g in r["groups"] for c in g["checks"]}
     assert "error" in results
+
+
+def _make_report(result_value: str, tmp_path: Path) -> Path:
+    """Write a minimal AppInspect-shaped JSON with a single check of the given result."""
+    payload = {
+        "reports": [
+            {
+                "app": "aegis_app",
+                "groups": [
+                    {
+                        "name": "tests.synthetic",
+                        "checks": [
+                            {"name": "check_synthetic", "result": result_value, "messages": []}
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    out = tmp_path / f"report-{result_value}.json"
+    out.write_text(json.dumps(payload))
+    return out
+
+
+def test_postprocessor_blocks_on_unknown_result_severity(tmp_path: Path) -> None:
+    """Allow-list semantics: a future `critical` severity must block (S3).
+
+    Regression guard for the inversion from deny-list to allow-list.
+    """
+    report = _make_report("critical", tmp_path)
+    rc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "_appinspect_postprocess.py"),
+            str(report),
+            "--expect-file",
+            str(APP_DIR / ".appinspect.expect.yaml"),
+            "--summary-file",
+            str(tmp_path / "summary.txt"),
+        ],
+        check=False,
+        capture_output=True,
+    ).returncode
+    assert rc == 1, "unknown result 'critical' should block (allow-list semantics)"
+
+
+def test_postprocessor_rejects_expect_entry_missing_comment(tmp_path: Path) -> None:
+    """Suppression validation (S4): entries without `comment` must exit 2.
+
+    Splunkbase reviewer precedent requires every suppression to carry a
+    human-readable justification; lax acceptance was a silent failure.
+    """
+    bad_expect = tmp_path / "expect.yaml"
+    bad_expect.write_text("check_some_error:\n  not_a_comment: true\n")
+    rc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "_appinspect_postprocess.py"),
+            str(FIXTURES / "appinspect_error_report.json"),
+            "--expect-file",
+            str(bad_expect),
+            "--summary-file",
+            str(tmp_path / "summary.txt"),
+        ],
+        check=False,
+        capture_output=True,
+    ).returncode
+    assert rc == 2
+
+
+def test_postprocessor_rejects_expect_entry_with_empty_comment(tmp_path: Path) -> None:
+    """Empty-string comment is the same silent-acceptance failure mode."""
+    bad_expect = tmp_path / "expect.yaml"
+    bad_expect.write_text("check_some_error:\n  comment: ''\n")
+    rc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "_appinspect_postprocess.py"),
+            str(FIXTURES / "appinspect_error_report.json"),
+            "--expect-file",
+            str(bad_expect),
+            "--summary-file",
+            str(tmp_path / "summary.txt"),
+        ],
+        check=False,
+        capture_output=True,
+    ).returncode
+    assert rc == 2
+
+
+def test_postprocessor_rejects_expect_entry_non_mapping(tmp_path: Path) -> None:
+    """Non-dict entry (e.g. plain string) raises TypeError -> exit 2."""
+    bad_expect = tmp_path / "expect.yaml"
+    bad_expect.write_text("check_some_error: just_a_string\n")
+    rc = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPTS / "_appinspect_postprocess.py"),
+            str(FIXTURES / "appinspect_error_report.json"),
+            "--expect-file",
+            str(bad_expect),
+            "--summary-file",
+            str(tmp_path / "summary.txt"),
+        ],
+        check=False,
+        capture_output=True,
+    ).returncode
+    assert rc == 2
