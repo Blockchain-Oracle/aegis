@@ -258,8 +258,11 @@ stories:
     depends_on: [story-app-02-props-transforms-for-aegis-verdict-sourcetype]
   - id: story-app-04-collections-conf-kvstore-verdict-history
     epic: "EPIC-09 — Surface 4 Splunk app"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-app-01-app-conf-and-metadata-skeleton]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/89"
+    merged_at: "2026-06-05T23:55:00Z"
+    notes: "KV-store schema landed. aegis_verdict_history (16 fields, accelerated on trace_id+timestamp) + aegis_profile_index (4 profile rows: FSI/HIPAA/PUBSEC/PCI). Lookups wired in transforms.conf. Seed CSV ships 4 profile rows. Bootstrap saved search ([Aegis - Bootstrap profile index]) owned by story-app-03."
   - id: story-app-05-dashboard-agent-risk-overview
     epic: "EPIC-09 — Surface 4 Splunk app"
     status: PENDING
