@@ -178,9 +178,11 @@ stories:
     notes: "Demo wow-moment: Aegis blocks prompt injection BEFORE the model is called. 39 mw tests pass. judges-05 dep relaxed (functional dep satisfied by judges-02 + judges-04)."
   - id: story-mw-04-model-middleware-post-inference-pii-check
     epic: "EPIC-06 — Surface 1 middleware"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-mw-03-model-middleware-pre-inference-scan, story-explainer-01-template-based-verdict-explainer]
-    notes: "2026-06-05 — depends_on swap: story-foundsec-03 DEFERRED per ADR-013, replaced by story-explainer-01 (template-based explainer)."
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/86"
+    merged_at: "2026-06-05T22:30:00Z"
+    notes: "Wires both POST-INFERENCE SCAN anchors. ModelOutputBlockedByAegis added. _post_inference helper module (136 LOC). 14 BDD tests + meta tests (file ≤400 LOC, anchors still present). 205/205 package tests pass."
   - id: story-mw-05-subagent-middleware
     epic: "EPIC-06 — Surface 1 middleware"
     status: PENDING
