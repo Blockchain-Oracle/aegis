@@ -368,9 +368,11 @@ stories:
   # EPIC-09 addition (2026-06-05) — MITRE ATLAS technique-ID lookup mapping for SOC pivots
   - id: story-app-14-mitre-atlas-technique-mapping
     epic: "EPIC-09 — Surface 4 Splunk app"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-app-02-props-transforms-for-aegis-verdict-sourcetype]
-    notes: "Added 2026-06-05 per ADR-013 — CSV lookup maps 11 Cisco AI Defense rule names → MITRE ATLAS technique IDs (AML.T0051 etc.). Open-standards signal for Quality of Idea + Tech Impl judges."
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/91"
+    merged_at: "2026-06-06T00:30:00Z"
+    notes: "11 rules → 4 ATLAS techniques (T0051 / T0057 / T0050 / T0048). Lookup wired in transforms.conf + invoked in HIGH severity correlation alert so ES notable events carry ATLAS IDs. ADR-005 updated."
 
   # EPIC-10 addition — End-to-end agent → Splunk integration dress rehearsal
   - id: story-eval-06-end-to-end-agent-to-splunk-integration
