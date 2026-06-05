@@ -80,21 +80,21 @@
     "ds_table": {
       "type": "ds.search",
       "options": {
-        "query": "`aegis_data` agent_id=$input_agent_id$ severity=$input_severity$ verdict_label=$input_verdict_label$ | search rule=$input_rule$ OR $input_rule$=\"*\" | eval explanation_short = if(len(explanation)>120, substr(explanation,1,120).\"…\", explanation) | table _time agent_id surface verdict_label severity rule explanation_short latency_ms trace_id | sort -_time | head 200"
+        "query": "`aegis_data` agent_id=\"$input_agent_id$\" severity=\"$input_severity$\" verdict_label=\"$input_verdict_label$\" rule=\"$input_rule$\" | eval explanation_short = if(len(explanation)>120, substr(explanation,1,120).\"…\", explanation) | table _time agent_id surface verdict_label severity rule explanation_short latency_ms trace_id | sort -_time | head 200"
       },
       "name": "ds_table"
     },
     "ds_detail": {
       "type": "ds.search",
       "options": {
-        "query": "`aegis_data` trace_id=$row_trace_id$ | head 1 | table _time agent_id surface verdict_label severity rule explanation latency_ms trace_id atlas_technique_id atlas_technique_name atlas_tactic_id"
+        "query": "`aegis_data` trace_id=\"$row_trace_id$\" | head 1 | table _time agent_id surface verdict_label severity rule explanation latency_ms trace_id atlas_technique_id atlas_technique_name atlas_tactic_id"
       },
       "name": "ds_detail"
     },
     "ds_related": {
       "type": "ds.search",
       "options": {
-        "query": "`aegis_data` trace_id=$row_trace_id$ | table _time surface verdict_label severity rule | sort _time"
+        "query": "`aegis_data` trace_id=\"$row_trace_id$\" | table _time surface verdict_label severity rule | sort _time"
       },
       "name": "ds_related"
     }
@@ -134,7 +134,7 @@
           "type": "drilldown.event.click",
           "options": {
             "valid": true,
-            "uri": "/app/SplunkEnterpriseSecuritySuite/investigation_workbench?form.trace_id=$row.trace_id$"
+            "uri": "/app/SplunkEnterpriseSecuritySuite/investigation_workbench?form.search=trace_id%3D%22$row.trace_id$%22"
           }
         }
       ]
