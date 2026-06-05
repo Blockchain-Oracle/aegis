@@ -31,21 +31,21 @@
     "ds_header_kpis": {
       "type": "ds.search",
       "options": {
-        "query": "`aegis_data` | stats count as total_decisions, dc(trace_id) as unique_traces, count(eval(explanation!=\"\")) as attested_decisions | eval coverage_label = strftime(now()-30*86400,\"%Y-%m-%d\") . \" — \" . strftime(now(),\"%Y-%m-%d\")"
+        "query": "`aegis_data` | stats count as total_decisions, dc(trace_id) as unique_traces, count(eval(explanation!=\"\")) as attested_decisions | eval coverage_label = strftime(relative_time(now(),\"$input_time.earliest$\"),\"%Y-%m-%d\") . \" — \" . strftime(relative_time(now(),\"$input_time.latest$\"),\"%Y-%m-%d\")"
       },
       "name": "ds_header_kpis"
     },
     "ds_nist_rmf_table": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults count=4 | streamstats count as row | eval function = case(row=1,\"GOVERN\", row=2,\"MAP\", row=3,\"MEASURE\", row=4,\"MANAGE\"), aegis_components = case(row=1,\"S1 middleware policy enforcement; S4 dashboards expose accountability roles\", row=2,\"S2 MCP server enumerates agent boundaries; aegis_verdict_history KV-store maps decision context\", row=3,\"S4 eval harness produces precision/recall/F1/ECE; OTel gen_ai.evaluation.result events emit per-decision scores\", row=4,\"S1 model_middleware blocks/redacts; story-mw-08 audit chain threads pre+post trace_ids; story-app-08 RBA closes the loop in ES\"), evidence_query = case(row=1,\"`aegis_data` surface=mw_model | stats count\", row=2,\"`aegis_data` | stats dc(agent_id) as agents dc(surface) as surfaces\", row=3,\"index=cisco_ai_defense sourcetype=cisco_ai_defense:aegis_verdict | stats count\", row=4,\"`aegis_data` verdict_label=block | stats count by agent_id\") | table function aegis_components evidence_query"
+        "query": "| makeresults count=4 | eval _time=now() | streamstats count as row | eval function = case(row=1,\"GOVERN\", row=2,\"MAP\", row=3,\"MEASURE\", row=4,\"MANAGE\"), aegis_components = case(row=1,\"S1 middleware policy enforcement; S4 dashboards expose accountability roles\", row=2,\"S2 MCP server enumerates agent boundaries; aegis_verdict_history KV-store maps decision context\", row=3,\"S4 eval harness produces precision/recall/F1/ECE; OTel gen_ai.evaluation.result events emit per-decision scores\", row=4,\"S1 model_middleware blocks/redacts; story-mw-08 audit chain threads pre+post trace_ids; story-app-08 RBA closes the loop in ES\"), evidence_query = case(row=1,\"`aegis_data` surface=mw_model | stats count\", row=2,\"`aegis_data` | stats dc(agent_id) as agents dc(surface) as surfaces\", row=3,\"index=cisco_ai_defense sourcetype=cisco_ai_defense:aegis_verdict | stats count\", row=4,\"`aegis_data` verdict_label=block | stats count by agent_id\") | table function aegis_components evidence_query"
       },
       "name": "ds_nist_rmf_table"
     },
     "ds_eu_article_6_table": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults count=5 | streamstats count as row | eval annex_iii_use_case = case(row=1,\"Critical infrastructure (Annex III §2)\", row=2,\"Employment, worker management (Annex III §4)\", row=3,\"Essential private/public services (Annex III §5)\", row=4,\"Law enforcement (Annex III §6)\", row=5,\"Administration of justice + democratic processes (Annex III §8)\"), article_6_trigger = case(row=1,\"Article 6(2) — Annex III listed\", row=2,\"Article 6(2) — Annex III + profiling clause (paragraph 3 last subparagraph)\", row=3,\"Article 6(2) — Annex III\", row=4,\"Article 6(2) — Annex III\", row=5,\"Article 6(2) — Annex III + profiling clause\"), aegis_response = case(row=1,\"S1 model_middleware blocks injection attempts; verdicts logged with trace_id for Article 9 risk-management evidence\", row=2,\"S1 PII/PHI redaction; story-app-07 HIPAA panel renders detection counts by Safe Harbor 18 identifier\", row=3,\"All 4 surfaces emit OTel events; story-app-08 RBA escalates HIGH-severity to ES analyst\", row=4,\"Foundation-Sec explainer (or template v1) attaches WHY-string for due-process review\", row=5,\"PCI panel + audit-chain trace_ids satisfy decision-traceability obligations\") | table annex_iii_use_case article_6_trigger aegis_response"
+        "query": "| makeresults count=5 | eval _time=now() | streamstats count as row | eval annex_iii_use_case = case(row=1,\"Critical infrastructure (Annex III §2)\", row=2,\"Employment, worker management (Annex III §4)\", row=3,\"Essential private/public services (Annex III §5)\", row=4,\"Law enforcement (Annex III §6)\", row=5,\"Administration of justice + democratic processes (Annex III §8)\"), article_6_trigger = case(row=1,\"Article 6(2) — Annex III listed\", row=2,\"Article 6(2) — Annex III + profiling clause (paragraph 3 last subparagraph)\", row=3,\"Article 6(2) — Annex III\", row=4,\"Article 6(2) — Annex III\", row=5,\"Article 6(2) — Annex III + profiling clause\"), aegis_response = case(row=1,\"S1 model_middleware blocks injection attempts; verdicts logged with trace_id for Article 9 risk-management evidence\", row=2,\"S1 PII/PHI redaction; story-app-07 HIPAA panel renders detection counts by Safe Harbor 18 identifier\", row=3,\"All 4 surfaces emit OTel events; story-app-08 RBA escalates HIGH-severity to ES analyst\", row=4,\"Foundation-Sec explainer (or template v1) attaches WHY-string for due-process review\", row=5,\"PCI panel + audit-chain trace_ids satisfy decision-traceability obligations\") | table annex_iii_use_case article_6_trigger aegis_response"
       },
       "name": "ds_eu_article_6_table"
     },
@@ -66,7 +66,7 @@
     "ds_coverage_footer": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults | eval generated = strftime(now(),\"%Y-%m-%d %H:%M:%S %Z\") | eval app_version = \"Aegis v1.0.0\" | table app_version generated"
+        "query": "| makeresults | eval _time=now() | eval generated = strftime(now(),\"%Y-%m-%d %H:%M:%S %Z\") | eval app_version = \"Aegis v1.0.0\" | table app_version generated"
       },
       "name": "ds_coverage_footer"
     }
@@ -95,28 +95,28 @@
     "eu_ai_act_article_6_mapping": {
       "type": "splunk.table",
       "title": "EU AI Act Article 6 — high-risk classification mapping",
-      "description": "Article 6 high-risk classification triggers (Article 6(1) product-safety integration + Article 6(2) Annex III enumeration). Bulk of obligations land 2 August 2026. Aegis decisions can satisfy Article 9 (risk management) evidence obligations.",
+      "description": "Article 6 high-risk classification triggers (Article 6(1) product-safety integration + Article 6(2) Annex III enumeration). High-risk Annex III obligations under Article 6(2) apply from 2 August 2026. Aegis decisions can satisfy Article 9 (risk management) evidence obligations.",
       "dataSources": {"primary": "ds_eu_article_6_table"},
       "options": {"rowNumbers": false}
     },
     "hipaa_safe_harbor_18_panel": {
       "type": "splunk.table",
       "title": "HIPAA Safe Harbor 18 — PHI detection counts",
-      "description": "Conditional on input_jurisdictional_tag == \"HIPAA\" or \"ALL\". Rolling count of PHI-rule verdicts grouped by surface + agent. Cisco AI Defense emits PII with HIPAA-relevant entity_types; future Cisco taxonomy may include discrete PHI — both pathways are captured via the rule=PHI predicate.",
+      "description": "Conditional on input_jurisdictional_tag == \"HIPAA\" or \"ALL\". An empty table means EITHER no PHI verdicts in the window OR the current profile gate excluded this panel — check the Jurisdictional profile dropdown above. Cisco AI Defense currently emits PII with HIPAA-relevant entity_types; the PHI row in the ATLAS lookup is forward-compat for an eventual discrete PHI rule.",
       "dataSources": {"primary": "ds_hipaa_safe_harbor"},
-      "options": {"rowNumbers": false}
+      "options": {"rowNumbers": false, "showNoData": true}
     },
     "pci_dss_11x_panel": {
       "type": "splunk.table",
       "title": "PCI DSS 11.x — PCI detection counts",
-      "description": "Conditional on input_jurisdictional_tag == \"PCI\" or \"ALL\". PCI-rule verdicts grouped by surface, agent, and severity. Supports PCI-DSS 4.0 11.x sub-requirements via the persisted KV-store retention of PCI-tagged trace_ids.",
+      "description": "Conditional on input_jurisdictional_tag == \"PCI\" or \"ALL\". An empty table means EITHER no PCI verdicts in the window OR the current profile gate excluded this panel — check the Jurisdictional profile dropdown above. Supports PCI-DSS 4.0 11.x sub-requirements via the persisted KV-store retention of PCI-tagged trace_ids.",
       "dataSources": {"primary": "ds_pci_dss_11x"},
-      "options": {"rowNumbers": false}
+      "options": {"rowNumbers": false, "showNoData": true}
     },
     "export_pdf_action": {
       "type": "splunk.markdown",
       "options": {
-        "markdown": "### Export PDF for examiner record\\n\\nGenerate a print-ready PDF of this dashboard via Splunk's native PDF rendering endpoint. The output is the canonical artifact for the examiner's file: NIST RMF mapping + SR 26-2 quote + EU AI Act mapping + the profile-gated detection panels + the coverage footer.\\n\\n[Export PDF](/services/pdfgen/render?input-dashboard=/app/aegis_app/regulator_evidence_pack&namespace=aegis_app&earliest=$input_time.earliest$&latest=$input_time.latest$&form.input_jurisdictional_tag=$input_jurisdictional_tag$)\\n\\nThe link uses the Splunk `/services/pdfgen/render` endpoint with the current input tokens passed through so the rendered PDF reflects exactly what the examiner sees on screen."
+        "markdown": "### Export PDF for examiner record\\n\\n**Browser print → Save as PDF** is the canonical examiner-artifact export path. The legacy `/services/pdfgen/render` endpoint does not natively render Dashboard Studio v2 dashboards on all Splunk tenants — we fall back to the browser to guarantee a clean PDF on any deployment.\\n\\n**How to export:**\\n\\n1. Press **Cmd+P** (macOS) or **Ctrl+P** (Windows/Linux).\\n2. In the print dialog, set **Destination** to **Save as PDF**.\\n3. Set **Layout** to **Landscape** and **Margins** to **None** for the cleanest examiner artifact.\\n4. Save with a filename like `aegis-evidence-pack-YYYY-MM-DD.pdf`.\\n\\nThe browser-print path preserves all dashboard content (NIST RMF mapping, SR 26-2 quote, EU AI Act mapping, profile-gated panels, coverage footer) and produces an artifact suitable for the examiner's file."
       }
     },
     "coverage_footer": {

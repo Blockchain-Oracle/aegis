@@ -195,6 +195,13 @@ stories:
     epic: "EPIC-06 — Surface 1 middleware"
     status: PENDING
     depends_on: [story-mw-02-tool-middleware-with-defenseclaw-args, story-mw-03-model-middleware-pre-inference-scan]
+  - id: story-mw-08-multi-verdict-audit-trail
+    epic: "EPIC-06 — Surface 1 middleware"
+    status: COMPLETE
+    depends_on: [story-mw-04-model-middleware-post-inference-pii-check]
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/98"
+    merged_at: "2026-06-06T03:00:00Z"
+    notes: "F1 finding from PR #86 retroactive review. Threads aegis_pre_trace_id + aegis_post_trace_id into AIMessage.extras. Closes issue #94. 12 new tests; 220/220 package tests pass."
 
   # EPIC-07 — Surface 2 (Aegis MCP Server)
   - id: story-mcp-01-server-skeleton-with-mcp-python-sdk
