@@ -240,8 +240,11 @@ stories:
   # EPIC-09 — Surface 4 (Splunk app)
   - id: story-app-01-app-conf-and-metadata-skeleton
     epic: "EPIC-09 — Surface 4 Splunk app"
-    status: PENDING
+    status: COMPLETE
     depends_on: []
+    pr: "https://github.com/Blockchain-Oracle/aegis/pull/87"
+    merged_at: "2026-06-05T23:00:00Z"
+    notes: "Splunk app skeleton landed: app.conf (5 stanzas) + default.meta (system-wide exports) + extension-less README + nav/default.xml. Mirrors DNS Guard pattern. Unblocks every other EPIC-09 story."
   - id: story-app-02-props-transforms-for-aegis-verdict-sourcetype
     epic: "EPIC-09 — Surface 4 Splunk app"
     status: PENDING
