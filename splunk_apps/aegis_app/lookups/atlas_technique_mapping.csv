@@ -1,0 +1,12 @@
+rule_name,atlas_technique_id,atlas_technique_name,atlas_tactic_id
+Prompt Injection,AML.T0051,LLM Prompt Injection,AML.TA0005
+PII,AML.T0057,LLM Data Leakage,AML.TA0010
+PHI,AML.T0057,LLM Data Leakage,AML.TA0010
+PCI,AML.T0057,LLM Data Leakage,AML.TA0010
+Code Detection,AML.T0050,LLM Plugin Compromise,AML.TA0007
+Hate Speech,AML.T0048,External Harms,AML.TA0011
+Harassment,AML.T0048,External Harms,AML.TA0011
+Sexual Content & Exploitation,AML.T0048,External Harms,AML.TA0011
+Violence & Public Safety Threats,AML.T0048,External Harms,AML.TA0011
+Social Division & Polarization,AML.T0048,External Harms,AML.TA0011
+Profanity,AML.T0048,External Harms,AML.TA0011
