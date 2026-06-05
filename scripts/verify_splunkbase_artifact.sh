@@ -48,6 +48,7 @@ REQUIRED=(
   "default/app.conf"
   "README"
   "LICENSE"
+  "RELEASE_NOTES.md"
   "META-INF/manifest.json"
 )
 for path in "${REQUIRED[@]}"; do
@@ -57,10 +58,11 @@ for path in "${REQUIRED[@]}"; do
   fi
 done
 
-# 5. No dev cruft
-if find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name ".DS_Store" -o -name "tests" \) | grep -q .; then
-  echo "artifact contains dev cruft:" >&2
-  find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name ".DS_Store" -o -name "tests" \) >&2
+# 5. No dev cruft or operations tooling — scripts/ and tests/ are dev-only
+# and must NOT ship inside the Splunkbase tarball.
+if find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name ".DS_Store" -o -name "tests" -o -name "scripts" \) | grep -q .; then
+  echo "artifact contains dev cruft / operations tooling:" >&2
+  find "${APP_ROOT}" \( -name "__pycache__" -o -name "*.pyc" -o -name ".DS_Store" -o -name "tests" -o -name "scripts" \) >&2
   exit 1
 fi
 
@@ -72,14 +74,23 @@ if [ "${MANIFEST_VERSION}" != "${APP_VERSION}" ]; then
   exit 1
 fi
 
-# 7. AppInspect (best effort; only if installed locally)
+# 7. AppInspect re-run on the extracted tree (best effort; only if
+# splunk-appinspect is installed). Invoked inline rather than via the
+# packaged scripts/run_appinspect.sh because the tarball intentionally
+# omits scripts/ — the runner lives at the repo root for ops use.
 if command -v splunk-appinspect >/dev/null 2>&1 || uv run splunk-appinspect --version >/dev/null 2>&1; then
   echo "running AppInspect on extracted tree..."
-  APP_DIR="${APP_ROOT}" OUTPUT_DIR="${TMPDIR_EXTRACT}" \
-    bash "${APP_ROOT}/scripts/run_appinspect.sh" || {
-      echo "AppInspect failed on extracted tree" >&2
-      exit 1
-    }
+  if command -v splunk-appinspect >/dev/null 2>&1; then
+    APPINSPECT=(splunk-appinspect)
+  else
+    APPINSPECT=(uv run splunk-appinspect)
+  fi
+  "${APPINSPECT[@]}" inspect "${APP_ROOT}" \
+    --mode test \
+    --included-tags cloud \
+    --excluded-tags manual \
+    --output-file "${TMPDIR_EXTRACT}/appinspect-report.json" \
+    --data-format json
 fi
 
 echo "OK: ${ARTIFACT} passed all checks"

@@ -32,8 +32,12 @@ import sys
 import tarfile
 from pathlib import Path
 
-# Dev cruft patterns that must NEVER appear in a release tarball. Matched
-# against POSIX-style relative paths (relative to source dir).
+# Dev cruft + operations-tooling patterns that must NEVER appear in a
+# release tarball. Matched against POSIX-style relative paths (relative
+# to source dir). `scripts/` and `tests/` live inside the app source
+# tree for repo-local CI convenience but are NOT runtime artifacts —
+# stripping them keeps Splunkbase AppInspect from flagging bash/JSON
+# fixtures + keeps the artifact minimal (~40 KB vs ~55 KB).
 DEV_CRUFT_PATTERNS = (
     "__pycache__",
     "__pycache__/*",
@@ -47,6 +51,10 @@ DEV_CRUFT_PATTERNS = (
     "tests/*",
     "*/tests",
     "*/tests/*",
+    "scripts",
+    "scripts/*",
+    "*/scripts",
+    "*/scripts/*",
     ".pytest_cache",
     ".pytest_cache/*",
     "*/.pytest_cache",

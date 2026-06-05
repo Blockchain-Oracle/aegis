@@ -108,6 +108,7 @@ def test_build_tarball_contains_required_files(built_artifact: Path) -> None:
         "aegis_app/default/app.conf",
         "aegis_app/README",
         "aegis_app/LICENSE",
+        "aegis_app/RELEASE_NOTES.md",
         "aegis_app/META-INF/manifest.json",
     }
     missing = required - names
@@ -115,11 +116,70 @@ def test_build_tarball_contains_required_files(built_artifact: Path) -> None:
 
 
 def test_build_tarball_omits_dev_cruft(built_artifact: Path) -> None:
+    """Dev tooling (scripts/, tests/) + cache dirs must NOT ship.
+
+    silent-failure-hunter on PR #106 caught that packaging operations
+    tooling (run_appinspect.sh, _appinspect_postprocess.py, fixtures)
+    inside the tarball is a Splunkbase reviewer red flag AND creates a
+    circular dependency in the verify script.
+    """
     with tarfile.open(built_artifact, "r:gz") as tar:
         names = tar.getnames()
-    forbidden_patterns = ("__pycache__", ".pyc", ".DS_Store", "/tests/", "/tests")
+    forbidden_patterns = (
+        "__pycache__",
+        ".pyc",
+        ".DS_Store",
+        "/tests/",
+        "/tests",
+        "/scripts/",
+        "/scripts",
+    )
     bad = [n for n in names if any(p in n for p in forbidden_patterns)]
-    assert not bad, f"dev cruft in tarball: {bad}"
+    assert not bad, f"dev cruft / ops tooling in tarball: {bad}"
+
+
+def test_release_notes_exists_at_app_root() -> None:
+    """Splunkbase manifest declares releaseNotes.name = 'RELEASE_NOTES.md'.
+
+    silent-failure-hunter on PR #106: missing file would surface as a
+    Splunkbase listing warning at submission time.
+    """
+    release_notes = APP_SRC / "RELEASE_NOTES.md"
+    assert release_notes.exists()
+    text = release_notes.read_text()
+    assert "1.0.0" in text, "RELEASE_NOTES.md should reference 1.0.0"
+
+
+def test_build_script_loud_fails_when_appinspect_missing_and_not_skipped(tmp_path: Path) -> None:
+    """SKIP_APPINSPECT=1 is the only acceptable way to bypass; silent skip is forbidden.
+
+    silent-failure-hunter on PR #106 caught the silent-skip fallback. The
+    fixup makes the absent-runner case exit 2 with a clear message.
+    """
+    # Shadow the runner so the build script sees it as missing.
+    fake_app = tmp_path / "splunk_apps" / "aegis_app"
+    fake_app.mkdir(parents=True)
+    (fake_app / "default").mkdir()
+    (fake_app / "default" / "app.conf").write_text("[install]\nversion = 1.0.0\n")
+    # Run the build script with APP_SRC pointed at the fake tree, no runner.
+    # Use SKIP_APPINSPECT=0 explicitly to exercise the loud path.
+    env = {
+        **os.environ,
+        "DIST_DIR": str(tmp_path / "dist"),
+        "REPO_ROOT": str(tmp_path),
+        "SKIP_APPINSPECT": "0",
+    }
+    result = subprocess.run(
+        ["bash", str(BUILD_SCRIPT)],
+        check=False,
+        env=env,
+        capture_output=True,
+    )
+    # Exit code 2 = explicit "loud fail on missing tooling"
+    assert result.returncode == 2, (
+        f"expected exit 2 on missing AppInspect runner without bypass, "
+        f"got {result.returncode}: stderr={result.stderr!r}"
+    )
 
 
 def test_build_is_deterministic(tmp_path: Path) -> None:

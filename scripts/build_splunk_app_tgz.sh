@@ -54,6 +54,8 @@ if [ -f "${MANIFEST}" ]; then
 fi
 
 # AppInspect preflight (story-app-11 semantics: zero unsuppressed errors).
+# Silent skip is forbidden: if the runner is missing AND the bypass flag is
+# not explicitly set, refuse to build rather than ship an unchecked artifact.
 if [ "${SKIP_APPINSPECT}" != "1" ]; then
   if [ -x "${APP_SRC}/scripts/run_appinspect.sh" ]; then
     echo "running AppInspect preflight..."
@@ -62,7 +64,9 @@ if [ "${SKIP_APPINSPECT}" != "1" ]; then
       exit 1
     }
   else
-    echo "  (skipping AppInspect: ${APP_SRC}/scripts/run_appinspect.sh not executable)"
+    echo "AppInspect runner not found at ${APP_SRC}/scripts/run_appinspect.sh" >&2
+    echo "  install splunk-appinspect or set SKIP_APPINSPECT=1 to bypass" >&2
+    exit 2
   fi
 fi
 
