@@ -33,11 +33,15 @@ from __future__ import annotations
 import os
 from typing import TYPE_CHECKING
 
+import structlog
+
 from splunkgate_judges.explainer import explain_verdict
 
 if TYPE_CHECKING:
     from splunkgate_core import Verdict, VerdictContext
     from splunklib.client import Service
+
+_logger = structlog.get_logger(__name__)
 
 __all__ = [
     "DEFAULT_MODEL",
@@ -142,8 +146,33 @@ def explain_via_ai_spl(
     already authenticated. We deliberately do not construct one here —
     auth + endpoint discovery belong to the integration layer.
     """
-    if _is_mock_mode() or service is None:
+    in_mock = _is_mock_mode()
+    if in_mock:
+        # Operator wired up a service but mock mode silently ignored it —
+        # almost always a config mistake. Log loud so they notice.
+        if service is not None:
+            _logger.warning(
+                "splunkgate.explainer.service_ignored_in_mock_mode",
+                trace_id=str(verdict.trace_id),
+            )
+        else:
+            _logger.info(
+                "splunkgate.explainer.mode",
+                mode="mock",
+                reason="env_default",
+                trace_id=str(verdict.trace_id),
+            )
         return explain_verdict(verdict, ctx)
+    if service is None:
+        # Live mode requested but no service to run the SPL — same string
+        # output as mock, but the operator should know live was unreachable.
+        _logger.warning(
+            "splunkgate.explainer.live_no_service",
+            trace_id=str(verdict.trace_id),
+        )
+        return explain_verdict(verdict, ctx)
+
+    _logger.info("splunkgate.explainer.mode", mode="live", trace_id=str(verdict.trace_id))
     try:
         spl = build_ai_spl(verdict, ctx)
         # splunklib oneshot returns a ResultsReader; first dict's
@@ -152,12 +181,32 @@ def explain_via_ai_spl(
         from splunklib.results import JSONResultsReader  # noqa: PLC0415
 
         stream = service.jobs.oneshot(spl, output_mode="json")
+        first_row_keys: list[str] = []
         for row in JSONResultsReader(stream):
             if isinstance(row, dict):
+                if not first_row_keys:
+                    first_row_keys = list(row.keys())
                 explanation = row.get("explanation")
                 if isinstance(explanation, str) and explanation.strip():
                     return explanation.strip()
-        # Empty / malformed response — fall through to template
+        # Empty / malformed response — log row keys so operators can debug
+        # field-name drift (`| ai` may emit a different column name on a
+        # future Splunk release) before falling through to template.
+        _logger.warning(
+            "splunkgate.explainer.no_explanation_in_response",
+            row_keys=first_row_keys,
+            trace_id=str(verdict.trace_id),
+        )
         return explain_verdict(verdict, ctx)
-    except Exception:  # noqa: BLE001 — template fallback is the contract
+    except Exception as exc:  # noqa: BLE001 — template fallback is the contract
+        # Auth, DNS, splunklib import, `| ai` command missing on the search
+        # head — all surface here. Fallback string preserves the chain but
+        # the exception class + message MUST be visible so live-call
+        # regressions don't look like a clean mock run.
+        _logger.warning(
+            "splunkgate.explainer.live_call_failed",
+            exc_class=type(exc).__name__,
+            exc_msg=str(exc),
+            trace_id=str(verdict.trace_id),
+        )
         return explain_verdict(verdict, ctx)

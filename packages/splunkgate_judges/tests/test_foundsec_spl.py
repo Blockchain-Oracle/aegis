@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 import pytest
+import structlog
 from splunkgate_core import RuleHit, Severity, Verdict, VerdictContext, VerdictLabel
 from splunkgate_judges.foundsec_spl import (
     DEFAULT_MODEL,
@@ -250,3 +251,84 @@ def test_explain_via_ai_spl_falls_back_when_live_returns_empty(
     # Template fallback
     assert "BLOCK" in out
     assert "HIGH" in out
+
+
+# ---------- structlog observability (silent-failure-hunter follow-up) ----------
+# Use structlog.testing.capture_logs() — the canonical pytest pattern for
+# structlog assertions. caplog only sees stdlib logging records, but our
+# convention (matching splunkgate_judges/ai_defense.py) uses structlog.
+
+
+def test_mock_mode_logs_info_when_service_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mock-mode default: log an info event so operators see the mode in use."""
+    monkeypatch.delenv(MOCK_ENV_VAR, raising=False)
+    with structlog.testing.capture_logs() as records:
+        explain_via_ai_spl(_verdict())
+    events = [(r.get("event"), r.get("mode")) for r in records]
+    assert ("splunkgate.explainer.mode", "mock") in events, events
+
+
+def test_mock_mode_warns_when_service_was_supplied(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Operator passed a service but mock mode silently ignored it — log loud."""
+    monkeypatch.setenv(MOCK_ENV_VAR, "true")
+    svc = MagicMock()
+    with structlog.testing.capture_logs() as records:
+        explain_via_ai_spl(_verdict(), service=svc)
+    svc.jobs.oneshot.assert_not_called()
+    events = [r.get("event") for r in records]
+    assert "splunkgate.explainer.service_ignored_in_mock_mode" in events, events
+
+
+def test_live_mode_logs_warning_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live-call exceptions must be visible — exception class + message logged."""
+    monkeypatch.setenv(MOCK_ENV_VAR, "false")
+    svc = MagicMock()
+    svc.jobs.oneshot.side_effect = RuntimeError("splunk auth failed")
+    with structlog.testing.capture_logs() as records:
+        explain_via_ai_spl(_verdict(), service=svc)
+    matched = [r for r in records if r.get("event") == "splunkgate.explainer.live_call_failed"]
+    assert matched, [r.get("event") for r in records]
+    assert matched[0].get("exc_class") == "RuntimeError"
+    assert matched[0].get("exc_msg") == "splunk auth failed"
+
+
+def test_live_mode_logs_warning_when_no_explanation_field(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Wrong field name in `| ai` response: log the row keys for debug."""
+    monkeypatch.setenv(MOCK_ENV_VAR, "false")
+
+    class _WrongFieldReader:
+        def __init__(self, _stream: object) -> None:
+            self._rows: list[dict[str, str]] = [{"result": "wrong field name"}]
+
+        def __iter__(self) -> Any:
+            return iter(self._rows)
+
+    monkeypatch.setattr("splunklib.results.JSONResultsReader", _WrongFieldReader)
+    svc = MagicMock()
+    svc.jobs.oneshot.return_value = b"unused"
+    with structlog.testing.capture_logs() as records:
+        explain_via_ai_spl(_verdict(), service=svc)
+    matched = [
+        r for r in records if r.get("event") == "splunkgate.explainer.no_explanation_in_response"
+    ]
+    assert matched, [r.get("event") for r in records]
+    assert matched[0].get("row_keys") == ["result"]
+
+
+def test_live_mode_no_service_logs_warning(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live mode requested but service=None — operator should be told."""
+    monkeypatch.setenv(MOCK_ENV_VAR, "false")
+    with structlog.testing.capture_logs() as records:
+        explain_via_ai_spl(_verdict(), service=None)
+    events = [r.get("event") for r in records]
+    assert "splunkgate.explainer.live_no_service" in events, events
