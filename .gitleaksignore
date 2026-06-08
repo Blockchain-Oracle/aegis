@@ -8,23 +8,23 @@
 # fingerprint keeps gitleaks's full scan active on every other file in the repo.
 tests/fixtures/pre_commit_violators/has_secret.py.fixture:aws-access-token:2
 
-# packages/aegis_judges/tests/test_ai_defense_client.py — synthetic API_KEY
+# packages/splunkgate_judges/tests/test_ai_defense_client.py — synthetic API_KEY
 # fixture used by respx mocks. Never reaches a real endpoint. The string is
 # intentionally shaped like a Cisco AI Defense key so the test exercises the
 # X-Cisco-AI-Defense-API-Key header path realistically.
-packages/aegis_judges/tests/test_ai_defense_client.py:generic-api-key:25
+packages/splunkgate_judges/tests/test_ai_defense_client.py:generic-api-key:25
 
-# packages/aegis_judges/tests/test_ai_defense_mock.py — same synthetic
-# AEGIS_AI_DEFENSE_API_KEY fixture set via monkeypatch in 3 tests that
+# packages/splunkgate_judges/tests/test_ai_defense_mock.py — same synthetic
+# SPLUNKGATE_AI_DEFENSE_API_KEY fixture set via monkeypatch in 3 tests that
 # verify AIDefenseClient.from_env() returns the live client (not the mock)
 # when the env var is set. The string "synth-test-key-12345" is fake by
 # construction — it doesn't authenticate against any real Cisco endpoint.
 # Two fingerprints per line because the file was modified across two
 # historical commits; both pre-modification and post-modification SHAs
 # are listed so the full-history scan reports zero leaks.
-120959be07347d67c83760fd1d5f5dbd7f4f82bf:packages/aegis_judges/tests/test_ai_defense_mock.py:generic-api-key:131
-120959be07347d67c83760fd1d5f5dbd7f4f82bf:packages/aegis_judges/tests/test_ai_defense_mock.py:generic-api-key:137
-120959be07347d67c83760fd1d5f5dbd7f4f82bf:packages/aegis_judges/tests/test_ai_defense_mock.py:generic-api-key:147
-90e5863a846a9352a2fd743a288430a5c6366702:packages/aegis_judges/tests/test_ai_defense_mock.py:generic-api-key:131
-90e5863a846a9352a2fd743a288430a5c6366702:packages/aegis_judges/tests/test_ai_defense_mock.py:generic-api-key:137
-90e5863a846a9352a2fd743a288430a5c6366702:packages/aegis_judges/tests/test_ai_defense_mock.py:generic-api-key:147
+120959be07347d67c83760fd1d5f5dbd7f4f82bf:packages/splunkgate_judges/tests/test_ai_defense_mock.py:generic-api-key:131
+120959be07347d67c83760fd1d5f5dbd7f4f82bf:packages/splunkgate_judges/tests/test_ai_defense_mock.py:generic-api-key:137
+120959be07347d67c83760fd1d5f5dbd7f4f82bf:packages/splunkgate_judges/tests/test_ai_defense_mock.py:generic-api-key:147
+90e5863a846a9352a2fd743a288430a5c6366702:packages/splunkgate_judges/tests/test_ai_defense_mock.py:generic-api-key:131
+90e5863a846a9352a2fd743a288430a5c6366702:packages/splunkgate_judges/tests/test_ai_defense_mock.py:generic-api-key:137
+90e5863a846a9352a2fd743a288430a5c6366702:packages/splunkgate_judges/tests/test_ai_defense_mock.py:generic-api-key:147
