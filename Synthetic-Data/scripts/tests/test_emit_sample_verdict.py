@@ -80,13 +80,28 @@ def test_dry_run_produces_requested_count() -> None:
 # ---------- BDD #3: every event validates against Verdict ----------
 
 
-def test_every_event_payload_validates_against_verdict_pydantic() -> None:
+def test_every_event_payload_validates_against_strict_verdict_no_stripping() -> None:
+    """Verdict has extra='forbid'. event must be strict — no aux fields polluting it.
+
+    Code-reviewer B1 on PR #110: aux fields like model_name + jurisdictional_tag
+    must live on the HEC `fields` sibling block, NOT inside `event`. Otherwise
+    consumers doing Verdict.model_validate(env['event']) raise ValidationError.
+    """
     envelopes = _run_dry_run(200)
     for env in envelopes:
-        payload = env["event"]
-        # Strip aux fields the Verdict type doesn't know about (model_name, jurisdictional_tag).
-        clean = {k: v for k, v in payload.items() if k not in {"model_name", "jurisdictional_tag"}}
-        Verdict.model_validate(clean)
+        # No key-stripping — the event MUST validate strictly.
+        Verdict.model_validate(env["event"])
+
+
+def test_aux_fields_live_on_hec_envelope_fields_sibling_not_event() -> None:
+    """HEC native pattern: indexed metadata in `fields`, payload in `event`."""
+    envelopes = _run_dry_run(50)
+    for env in envelopes:
+        assert "model_name" not in env["event"]
+        assert "jurisdictional_tag" not in env["event"]
+        assert "fields" in env
+        assert "model_name" in env["fields"]
+        assert "jurisdictional_tag" in env["fields"]
 
 
 # ---------- BDD #4: sourcetype is the canonical string ----------

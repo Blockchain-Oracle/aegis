@@ -209,12 +209,16 @@ def _jurisdictional_tag(rng: random.Random) -> str:
     return rng.choice(("FSI", "HIPAA", "PCI", "PUBSEC", "DEFAULT"))
 
 
-def _synthesize_verdict(rng: random.Random, now_anchor: datetime, idx: int) -> dict[str, Any]:
-    """Build one verdict event payload as a plain JSON dict.
+def _synthesize_verdict(
+    rng: random.Random, now_anchor: datetime, idx: int
+) -> tuple[dict[str, Any], dict[str, str]]:
+    """Build one verdict event payload + sidecar fields.
 
-    The payload mirrors splunkgate_core.verdict.Verdict exactly (so tests can
-    Pydantic-validate it without instantiating Splunk). Wrap-in-HEC happens
-    in _wrap_for_hec.
+    Returns (verdict_dict, aux_fields). The verdict_dict is canonical
+    splunkgate_core.verdict.Verdict shape (Verdict(extra="forbid") accepts
+    it without ValidationError). The aux_fields live on the HEC envelope's
+    `fields` block per Splunk HEC spec — Splunk indexes them as flat fields
+    without polluting the canonical Verdict schema.
     """
     label = _weighted_choice(rng, VERDICT_LABELS, _LABEL_WEIGHTS)
     severity = _weighted_choice(rng, SEVERITIES, _SEVERITY_BY_LABEL[label])
@@ -228,8 +232,10 @@ def _synthesize_verdict(rng: random.Random, now_anchor: datetime, idx: int) -> d
     modifications: dict[str, object] | None = None
     if label == "MODIFY":
         modifications = {"redacted_text": "[REDACTED]"}
-    return {
-        "trace_id": str(UUID(int=rng.getrandbits(128))),
+    verdict_payload = {
+        # version=4 sets the RFC 4122 version nibble — Pydantic UUID4 fields
+        # downstream may someday tighten the validator.
+        "trace_id": str(UUID(int=rng.getrandbits(128), version=4)),
         "timestamp": ts.isoformat(),
         "verdict": label,
         "severity": severity,
@@ -240,11 +246,12 @@ def _synthesize_verdict(rng: random.Random, now_anchor: datetime, idx: int) -> d
         "surface": surface,
         "latency_ms": latency_ms,
         "agent_id": _agent_id(rng),
-        # Aux fields surfaced to dashboards via props.conf — not on the Verdict
-        # type but harmless (Splunk JSON ingest indexes them as flat fields).
+    }
+    aux_fields = {
         "model_name": _model_name(rng),
         "jurisdictional_tag": _jurisdictional_tag(rng),
     }
+    return verdict_payload, aux_fields
 
 
 def _explanation(label: str, severity: str, rules: list[dict[str, Any]]) -> str:
@@ -254,14 +261,24 @@ def _explanation(label: str, severity: str, rules: list[dict[str, Any]]) -> str:
     return f"{label} (severity {severity}): {body}."
 
 
-def _wrap_for_hec(verdict: dict[str, Any], index: str) -> dict[str, Any]:
-    """Wrap a Verdict in Splunk HEC envelope per docs/architecture.md ADR-005."""
+def _wrap_for_hec(
+    verdict: dict[str, Any], aux_fields: dict[str, str], index: str
+) -> dict[str, Any]:
+    """Wrap a Verdict in a Splunk HEC envelope per docs/architecture.md ADR-005.
+
+    Aux metadata (model_name, jurisdictional_tag) lives in the HEC `fields`
+    sibling block — Splunk's native pattern for indexed metadata that should
+    NOT pollute the canonical event payload. `Verdict(extra="forbid")` would
+    otherwise raise ValidationError for any consumer that round-trips the
+    envelope's `event` through the Pydantic model.
+    """
     return {
         "time": datetime.fromisoformat(verdict["timestamp"]).timestamp(),
         "sourcetype": _SOURCETYPE,
         "source": _SOURCE,
         "index": index,
         "event": verdict,
+        "fields": aux_fields,
     }
 
 
@@ -299,8 +316,8 @@ def emit(args: Args) -> int:
     """Generate `args.count` verdicts and either print or POST them."""
     rng = random.Random(args.seed)  # noqa: S311 — synthesis only, deterministic by design
     now_anchor = datetime(2026, 6, 15, 0, 0, 0, tzinfo=UTC)
-    verdicts = [_synthesize_verdict(rng, now_anchor, i) for i in range(args.count)]
-    envelopes = [_wrap_for_hec(v, args.index) for v in verdicts]
+    pairs = [_synthesize_verdict(rng, now_anchor, i) for i in range(args.count)]
+    envelopes = [_wrap_for_hec(v, aux, args.index) for v, aux in pairs]
     if args.dry_run:
         for env in envelopes:
             sys.stdout.write(json.dumps(env, sort_keys=True) + "\n")
