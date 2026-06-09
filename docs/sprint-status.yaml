@@ -206,7 +206,10 @@ stories:
   # EPIC-07 — Surface 2 (SplunkGate MCP Server)
   - id: story-mcp-01-server-skeleton-with-mcp-python-sdk
     epic: "EPIC-07 — Surface 2 MCP Server"
-    status: IN_PROGRESS
+    status: COMPLETE
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/115"
+    merged_at: "2026-06-09T10:00:00Z"
+    notes: "FastMCP-based server skeleton, register_tool registry helper (schemas sourced from FastMCP for single source of truth), stdio (default) + Streamable HTTP transports, Origin-header DNS-rebind mitigation with localhost-only allowlist + scheme validation + IPv6 support, _ping no-op health-probe tool with dedicated mcp_health surface, python -m splunkgate_mcp entry + --version. 11 reviewer dispatches across 3 rounds caught 10 substantive findings — all addressed. Surface alias extracted to splunkgate_core.verdict to prevent VerdictContext drift. mcp[cli] pinned ~=1.27 given private _tool_manager._tools coupling."
     depends_on: [story-core-01-verdict-pydantic-types]
   - id: story-mcp-02-tool-score-prompt-injection
     epic: "EPIC-07 — Surface 2 MCP Server"
@@ -390,7 +393,10 @@ stories:
   # EPIC-09 addition — Synthetic verdict emitter for dashboards + demo
   - id: story-app-13-synthetic-verdict-emitter-script
     epic: "EPIC-09 — Surface 4 Splunk app"
-    status: PENDING
+    status: COMPLETE
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/110"
+    merged_at: "2026-06-08T11:09:00Z"
+    notes: "Drift fix flipped on 2026-06-09 — PR #110 already merged on 2026-06-08 but status field hadn't been updated. Caught during PR #115 MCP design audit."
     depends_on: [story-app-02-props-transforms-for-splunkgate-verdict-sourcetype, story-eval-01-synthetic-data-generator-dns-guard-pattern]
 
   # EPIC-09 addition (2026-06-05) — MITRE ATLAS technique-ID lookup mapping for SOC pivots
