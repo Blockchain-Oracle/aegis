@@ -70,12 +70,20 @@ Notes:
 - All env vars are passed via the `env` key — Cursor does NOT forward shell
   env vars to MCP subprocesses, so anything the server needs must be listed
   explicitly here.
-- `SPLUNKGATE_AI_DEFENSE_MOCK=1` keeps the judges deterministic and offline
-  so the tools light up with zero secrets. Drop this var and add
-  `SPLUNKGATE_AI_DEFENSE_API_KEY=<...>` once you want live Cisco AI Defense
-  verdicts.
+- `SPLUNKGATE_AI_DEFENSE_MOCK=1` selects a deterministic offline fixture
+  backend so the tools light up with zero secrets.
+  > **MOCK mode caveat:** verdicts under `SPLUNKGATE_AI_DEFENSE_MOCK=1` are
+  > **not** real Cisco AI Defense classifications — the mock backend returns a
+  > fixed rule set used for offline integration testing, and many real-world
+  > injection / leak shapes will surface as `ALLOW` / `BENIGN`. To validate
+  > SplunkGate against a real prompt-injection or PII payload, drop the mock
+  > flag and set `SPLUNKGATE_AI_DEFENSE_API_KEY=<your-key>`.
 - `splunkgate_audit_trace` additionally needs `SPLUNKGATE_SPLUNK_HOST`,
   `SPLUNKGATE_SPLUNK_USER`, `SPLUNKGATE_SPLUNK_PASSWORD` to reach Splunk REST.
+  Without them the tool surfaces a `ConfigError` in-band — `isError: true`
+  with `content[0].text` containing
+  `ConfigError: SPLUNKGATE_SPLUNK_HOST not set (or empty); required for Splunk REST search`
+  (the exact string raised by `splunkgate_judges.splunk_search._require_env`).
 
 ---
 
@@ -163,7 +171,9 @@ The SplunkGate HTTP server validates the `Origin` header per MCP spec —
 only localhost-family origins (`http://127.0.0.1`, `http://localhost`,
 `http://[::1]` and `https://` variants) are accepted, and a missing
 `Origin` is rejected. Set `"headers": {"Origin": "http://127.0.0.1"}` in
-the Cursor config exactly as shown above.
+the Cursor config exactly as shown above. The rejection emits HTTP 403
+with the response body `Origin not allowed` (literal string emitted by
+`splunkgate_mcp.server._check_origin`).
 
 ### `isError: true` in the tool result, but no JSON-RPC error
 
@@ -172,16 +182,21 @@ on `CallToolResult`, not as JSON-RPC errors (which are reserved for
 protocol-level failures). Verbatim from the spec
 (`../../../context/10-standards/01-mcp-spec-deep.md`): "Tool Execution
 Errors: Reported in tool results with `isError: true`". A SplunkGate
-judge-side failure (e.g., Cisco AI Defense unreachable) surfaces this way.
-Don't filter the in-band error out — the result still contains an
-explanation block the LLM can self-correct from.
+judge-side failure (e.g., Cisco AI Defense unreachable, or
+`splunkgate_audit_trace` invoked without the Splunk env vars set) surfaces
+this way. The human-readable explanation lives in **both**
+`result.structuredContent` (typed) and `result.content[0].text` (string)
+— older clients without `structuredContent` support keep working by reading
+the text block, so always check both fields. Don't filter the in-band error
+out: the explanation is what lets the LLM self-correct.
 
 ### Port 8765 already in use
 
 The SplunkGate HTTP transport binds `127.0.0.1:8765` (chosen to not
 collide with Splunk's `:8089/services/mcp`). If another process holds the
 port, `uvicorn` will fail at startup with `[Errno 48] Address already in
-use`. There is currently no env var to override the port; rebind the
-conflicting process or pick a different SplunkGate port by editing
-`HTTP_BIND_PORT` in `packages/splunkgate_mcp/src/splunkgate_mcp/server.py`
-locally.
+use`. There is currently no env var to override the port; either rebind the
+conflicting process or change the `HTTP_BIND_PORT` constant in
+`packages/splunkgate_mcp/src/splunkgate_mcp/server.py` locally — file an
+issue requesting an env-var override if you need this for a multi-tenant
+or container-orchestrated deployment.

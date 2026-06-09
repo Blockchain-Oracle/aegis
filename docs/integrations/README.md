@@ -60,6 +60,22 @@ For HTTP, the SDK negotiates the protocol version during `initialize` and sets
 the `MCP-Protocol-Version` header automatically on subsequent requests — the
 example JSON files deliberately do not hardcode the version.
 
+> **MOCK mode caveat:** the example configs set `SPLUNKGATE_AI_DEFENSE_MOCK=1`
+> so a judge can paste and run without a Cisco API key. Verdicts under that
+> flag are **not** real Cisco AI Defense classifications — they reflect a
+> fixed offline fixture rule set. Drop the flag and set
+> `SPLUNKGATE_AI_DEFENSE_API_KEY=<your-key>` to validate against real
+> prompt-injection or PII payloads.
+
+> **`splunkgate_audit_trace` precondition:** the audit-trace tool talks to
+> Splunk REST and additionally requires `SPLUNKGATE_SPLUNK_HOST`,
+> `SPLUNKGATE_SPLUNK_USER`, `SPLUNKGATE_SPLUNK_PASSWORD` env vars (USER +
+> PASSWORD basic auth on `/services/search/jobs`, not an HEC token — wrong
+> scope). Without them the tool surfaces a `ConfigError` in-band via
+> `isError: true`. The tool also catches Splunk HTTP 200 responses whose
+> body carries a `messages[].type == FATAL` payload (malformed SPL); without
+> that catch, a broken search would masquerade as empty success.
+
 ## Example JSON files
 
 Drop-in references that the per-client docs link to:

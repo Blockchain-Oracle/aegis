@@ -71,14 +71,21 @@ Notes:
   `~/.venv/splunkgate/bin/python`, etc.). Claude Desktop spawns the subprocess
   with the GUI environment, not your shell environment, so `PATH` differs from
   a terminal.
-- `SPLUNKGATE_AI_DEFENSE_MOCK=1` keeps the judges deterministic and offline so
-  the tools light up with zero secrets. Drop this var and add
-  `SPLUNKGATE_AI_DEFENSE_API_KEY=<...>` once you want live Cisco AI Defense
-  verdicts.
+- `SPLUNKGATE_AI_DEFENSE_MOCK=1` selects a deterministic offline fixture
+  backend so the tools light up with zero secrets.
+  > **MOCK mode caveat:** verdicts under `SPLUNKGATE_AI_DEFENSE_MOCK=1` are
+  > **not** real Cisco AI Defense classifications — the mock backend returns a
+  > fixed rule set used for offline integration testing, and many real-world
+  > injection / leak shapes will surface as `ALLOW` / `BENIGN`. To validate
+  > SplunkGate against a real prompt-injection or PII payload, drop the mock
+  > flag and set `SPLUNKGATE_AI_DEFENSE_API_KEY=<your-key>`.
 - `splunkgate_audit_trace` additionally needs `SPLUNKGATE_SPLUNK_HOST`,
   `SPLUNKGATE_SPLUNK_USER`, `SPLUNKGATE_SPLUNK_PASSWORD` to reach Splunk REST;
-  without them it errors in-band on first call (the other three tools work
-  without any Splunk connection).
+  without them the tool surfaces a `ConfigError` in-band — the failure looks
+  like `isError: true` with `content[0].text` containing
+  `ConfigError: SPLUNKGATE_SPLUNK_HOST not set (or empty); required for Splunk REST search`
+  (the exact string raised by `splunkgate_judges.splunk_search._require_env`).
+  The other three tools work without any Splunk connection.
 
 ---
 
@@ -135,10 +142,26 @@ Check the Claude Desktop MCP log:
 tail -f ~/Library/Logs/Claude/mcp*.log
 ```
 
-The log shows the `initialize` round-trip and any subprocess spawn errors. The
-most common failure is `command` (`python`) not resolving on Claude Desktop's
-`PATH` — substitute an absolute interpreter path. Restart Claude Desktop after
-any config edit; the client reads `claude_desktop_config.json` on launch only.
+The log shows the `initialize` round-trip and any subprocess spawn errors.
+Grep for specific signals:
+
+```bash
+# Confirm the SplunkGate subprocess started at all:
+grep "splunkgate_mcp" ~/Library/Logs/Claude/mcp*.log
+
+# Confirm which AI Defense backend was selected (mock vs live) at startup:
+grep "ai_defense.startup" ~/Library/Logs/Claude/mcp*.log
+
+# Surprising ALLOW / NONE_SEVERITY verdicts? Look for the WARN signals the
+# server emits on coercion or redaction misses:
+grep -E "audit_trace.coerce_miss|redaction.miss|redaction.no_pattern_for_rule" \
+    ~/Library/Logs/Claude/mcp*.log
+```
+
+The most common failure is `command` (`python`) not resolving on Claude
+Desktop's `PATH` — substitute an absolute interpreter path. Restart Claude
+Desktop after any config edit; the client reads `claude_desktop_config.json`
+on launch only.
 
 ### `Origin not allowed` (HTTP 403) on the HTTP transport
 
@@ -149,7 +172,10 @@ bridge sets `Origin` itself; if you're calling the server with `curl` or
 another client and seeing 403, add `-H "Origin: http://127.0.0.1"`.
 
 A missing `Origin` header is also rejected — the server requires the header on
-every HTTP request because a DNS-rebinding attack omits it.
+every HTTP request because a DNS-rebinding attack omits it. The rejection
+emits HTTP 403 with the response body `Origin not allowed` (literal string;
+emitted by `splunkgate_mcp.server._check_origin` — grep the SplunkGate
+server's stderr for that exact string to confirm the cause).
 
 ### Splunk's MCP Server is also configured
 
@@ -175,9 +201,14 @@ Expected. MCP reports tool execution errors **in-band** via `isError: true` on
 failures like an unknown method). Verbatim from the spec
 (`../../../context/10-standards/01-mcp-spec-deep.md`):
 "Tool Execution Errors: Reported in tool results with `isError: true`". A
-SplunkGate judge-side failure (e.g., Cisco AI Defense unreachable) surfaces
-this way. Don't filter the in-band error out — the result still contains an
-explanation block the LLM can self-correct from.
+SplunkGate judge-side failure (e.g., Cisco AI Defense unreachable, or
+`splunkgate_audit_trace` invoked without the Splunk env vars set) surfaces
+this way. The human-readable explanation lives in **both**
+`result.structuredContent` (typed) and `result.content[0].text` (string) —
+older clients without `structuredContent` support keep working by reading the
+text block, so always check both fields when surfacing the error to a user
+or LLM. Don't filter the in-band error out: the explanation is what lets the
+LLM self-correct.
 
 ### `MCP-Protocol-Version` header missing on HTTP
 
