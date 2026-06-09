@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -14,9 +15,12 @@ from splunkgate_mcp.otel import MCP_PROTOCOL_VERSION, build_span_attributes
 from splunkgate_mcp.schemas import VERDICT_OUTPUT_SCHEMA
 from splunkgate_mcp.server import (
     _REGISTERED_TOOLS,
+    HTTP_BIND_HOST,
+    HTTP_BIND_PORT,
     ensure_ping_registered,
     register_tool,
     resolve_transport,
+    serve_stdio,
     server,
 )
 
@@ -133,3 +137,14 @@ def test_resolve_transport_invalid_raises_config_error(monkeypatch: pytest.Monke
     monkeypatch.setenv("SPLUNKGATE_MCP_TRANSPORT", "ftp")
     with pytest.raises(ConfigError, match="SPLUNKGATE_MCP_TRANSPORT"):
         resolve_transport()
+
+
+def test_serve_stdio_is_async_callable() -> None:
+    """serve_stdio is an async function that wraps FastMCP.run_stdio_async."""
+    assert inspect.iscoroutinefunction(serve_stdio)
+
+
+def test_http_constants_are_127_0_0_1_and_8765() -> None:
+    """HTTP transport binds 127.0.0.1:8765 (locked per MCP DNS-rebind guidance)."""
+    assert HTTP_BIND_HOST == "127.0.0.1"
+    assert HTTP_BIND_PORT == 8765

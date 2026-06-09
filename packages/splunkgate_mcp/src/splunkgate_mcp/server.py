@@ -203,5 +203,42 @@ def resolve_transport() -> Transport:
     raise ConfigError(msg)
 
 
+# --- Entry points -------------------------------------------------------
+#
+# HTTP_BIND_HOST is locked to 127.0.0.1 per the MCP spec's DNS-rebinding
+# mitigation guidance — the server MUST NOT bind 0.0.0.0 because then a
+# malicious page in the user's browser could reach it via the Origin
+# bypass. HTTP_BIND_PORT is the SplunkGate-chosen port that does NOT
+# conflict with Splunk's MCP Server (which serves at :8089/services/mcp
+# under their REST surface).
+
+HTTP_BIND_HOST = "127.0.0.1"
+HTTP_BIND_PORT = 8765
+
+
+async def serve_stdio() -> None:
+    """Run the MCP server over stdio. Blocks until the client disconnects.
+
+    Default transport per MCP spec — clients SHOULD support stdio whenever
+    possible. Most MCP-aware hosts (Claude Desktop, Cursor) launch us via
+    subprocess + pipe to stdin/stdout.
+    """
+    await server.run_stdio_async()
+
+
+async def serve_http() -> None:
+    """Run the MCP server over Streamable HTTP bound to 127.0.0.1.
+
+    STUB: this entry-point's full implementation lands in Task 9 (Origin-
+    header validation middleware via Starlette's `add_middleware` + uvicorn
+    Server). For now, calls FastMCP's `run_streamable_http_async` directly
+    — which means the Origin check is NOT yet applied. Tests in Task 9
+    will exercise the cross-origin → 403 contract.
+    """
+    server.settings.host = HTTP_BIND_HOST
+    server.settings.port = HTTP_BIND_PORT
+    await server.run_streamable_http_async()
+
+
 # Register _ping at import time so `tools/list` works immediately.
 ensure_ping_registered()
