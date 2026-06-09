@@ -17,12 +17,14 @@ from splunkgate_mcp.server import (
     _REGISTERED_TOOLS,
     HTTP_BIND_HOST,
     HTTP_BIND_PORT,
+    build_http_app,
     ensure_ping_registered,
     register_tool,
     resolve_transport,
     serve_stdio,
     server,
 )
+from starlette.testclient import TestClient
 
 
 def test_version_is_0_1_0() -> None:
@@ -148,3 +150,44 @@ def test_http_constants_are_127_0_0_1_and_8765() -> None:
     """HTTP transport binds 127.0.0.1:8765 (locked per MCP DNS-rebind guidance)."""
     assert HTTP_BIND_HOST == "127.0.0.1"
     assert HTTP_BIND_PORT == 8765
+
+
+def test_http_origin_header_rejects_cross_origin() -> None:
+    """HTTP POST with cross-origin Origin returns 403 per MCP DNS-rebind mitigation."""
+    app = build_http_app()
+    client = TestClient(app)
+    resp = client.post(
+        "/mcp",
+        headers={"Origin": "https://attacker.example"},
+        json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+    )
+    assert resp.status_code == 403
+
+
+def test_http_origin_header_accepts_localhost() -> None:
+    """HTTP POST with localhost Origin passes the check (status != 403)."""
+    app = build_http_app()
+    # `with` context manager triggers the FastMCP streamable-HTTP lifespan
+    # which initialises its anyio task group — without it the MCP handler
+    # raises RuntimeError before any status code is returned.
+    with TestClient(app) as client:
+        resp = client.post(
+            "/mcp",
+            headers={"Origin": "http://127.0.0.1:3000"},
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        )
+    # Origin accepted → status NOT 403 (may be 200/406/415/421 depending on
+    # MCP handshake state — but Origin was accepted, that's what we test)
+    assert resp.status_code != 403
+
+
+def test_http_origin_header_missing_is_allowed() -> None:
+    """HTTP POST without Origin header is allowed (stdio bridge case)."""
+    app = build_http_app()
+    with TestClient(app) as client:
+        resp = client.post(
+            "/mcp",
+            json={"jsonrpc": "2.0", "id": 1, "method": "tools/list", "params": {}},
+        )
+    # Missing Origin should NOT trigger 403
+    assert resp.status_code != 403

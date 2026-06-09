@@ -28,12 +28,18 @@ import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from uuid import uuid4
 
 from mcp.server.fastmcp import FastMCP
 from splunkgate_core.errors import ConfigError
 from splunkgate_core.verdict import Severity, Verdict, VerdictLabel
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
+
+if TYPE_CHECKING:
+    from starlette.applications import Starlette
+    from starlette.requests import Request
 
 # FastMCP instance — the SDK boundary. Name is the canonical server name
 # advertised over the MCP protocol's `initialize` handshake.
@@ -229,15 +235,88 @@ async def serve_stdio() -> None:
 async def serve_http() -> None:
     """Run the MCP server over Streamable HTTP bound to 127.0.0.1.
 
-    STUB: this entry-point's full implementation lands in Task 9 (Origin-
-    header validation middleware via Starlette's `add_middleware` + uvicorn
-    Server). For now, calls FastMCP's `run_streamable_http_async` directly
-    — which means the Origin check is NOT yet applied. Tests in Task 9
-    will exercise the cross-origin → 403 contract.
+    Uses `build_http_app` so the Origin-check middleware is applied to
+    every request. Runs uvicorn directly (rather than FastMCP's helper)
+    because we want control over the ASGI app stack — specifically, the
+    OriginCheckMiddleware MUST run before FastMCP's protocol handlers.
     """
-    server.settings.host = HTTP_BIND_HOST
-    server.settings.port = HTTP_BIND_PORT
-    await server.run_streamable_http_async()
+    import uvicorn  # noqa: PLC0415
+
+    app = build_http_app()
+    config = uvicorn.Config(
+        app,
+        host=HTTP_BIND_HOST,
+        port=HTTP_BIND_PORT,
+        log_level="info",
+    )
+    await uvicorn.Server(config).serve()
+
+
+# --- HTTP Origin validation (MCP DNS-rebinding mitigation) --------------
+#
+# Per context/10-standards/01-mcp-spec-deep.md: "The HTTP transport MUST
+# validate the Origin header." Allowed origins are the localhost family
+# (127.0.0.1 / localhost / [::1]) plus the missing-Origin case (legitimate
+# stdio-bridge clients may not set the header). Everything else is 403.
+
+_ALLOWED_ORIGIN_HOSTS = frozenset({"127.0.0.1", "localhost", "[::1]"})
+
+
+def _is_allowed_origin(origin_header: str | None) -> bool:
+    """Return True if the Origin header is missing or points at localhost.
+
+    Missing Origin is allowed because legitimate MCP clients (Claude Desktop,
+    Cursor) running over the stdio bridge may not set it. Any non-localhost
+    origin is rejected per MCP DNS-rebinding mitigation.
+    """
+    if origin_header is None:
+        return True
+    # Origin is `scheme://host[:port]` per RFC 6454. Cheap parse: drop the
+    # scheme prefix, then the optional `:port` suffix. The remainder is
+    # the host, which we match against the localhost-family allowlist.
+    try:
+        without_scheme = origin_header.split("://", 1)[1]
+        host = without_scheme.split(":", 1)[0]
+    except IndexError:
+        # Malformed Origin → reject (defensive — RFC 6454 origins always
+        # contain a scheme).
+        return False
+    return host in _ALLOWED_ORIGIN_HOSTS
+
+
+class OriginCheckMiddleware(BaseHTTPMiddleware):
+    """Reject cross-origin POSTs with HTTP 403.
+
+    Applied to the Starlette ASGI app built by `build_http_app`. The
+    middleware runs BEFORE the FastMCP protocol handler, so rejected
+    requests never touch the MCP routing layer.
+    """
+
+    async def dispatch(self, request: Request, call_next: Callable[..., Any]) -> Response:
+        """Reject cross-origin requests with 403, pass everything else through."""
+        origin = request.headers.get("origin")
+        if not _is_allowed_origin(origin):
+            return Response(status_code=403, content=b"Origin not allowed")
+        return await call_next(request)
+
+
+def build_http_app() -> Starlette:
+    """Build the Starlette ASGI app with Origin-check middleware applied.
+
+    Extracted as its own function so tests can exercise the middleware
+    without spinning up a real uvicorn worker. Production `serve_http`
+    (above) calls this then hands the app to uvicorn.
+
+    Resets FastMCP's lazily-cached `_session_manager` first because
+    `StreamableHTTPSessionManager.run()` is a one-shot — each call to
+    `build_http_app` must produce a fresh, runnable session manager so
+    tests can build the app multiple times (and so a hypothetical
+    production restart cycle does not reuse a torn-down manager).
+    """
+    server._session_manager = None  # noqa: SLF001 — see docstring
+    app: Starlette = server.streamable_http_app()
+    app.add_middleware(OriginCheckMiddleware)
+    return app
 
 
 # Register _ping at import time so `tools/list` works immediately.
