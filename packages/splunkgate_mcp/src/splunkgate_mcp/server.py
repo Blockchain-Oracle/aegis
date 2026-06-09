@@ -191,11 +191,14 @@ def resolve_transport() -> Transport:
     startup (when __main__.py calls this), not during the first protocol
     message — easier to diagnose, fail-fast per the no-silent-failure rule.
     """
-    raw = os.environ.get("SPLUNKGATE_MCP_TRANSPORT", "stdio").lower()
-    if raw == "stdio":
+    raw = os.environ.get("SPLUNKGATE_MCP_TRANSPORT", "stdio")
+    normalized = raw.lower()
+    if normalized == "stdio":
         return "stdio"
-    if raw == "http":
+    if normalized == "http":
         return "http"
+    # Diagnostic preserves the user's original casing so e.g. an envvar
+    # typo of "STDIO " (with a trailing space) is visible in the error.
     msg = f"SPLUNKGATE_MCP_TRANSPORT must be 'stdio' or 'http', got {raw!r}"
     raise ConfigError(msg)
 
