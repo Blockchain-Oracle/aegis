@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from uuid import uuid4
+
 import splunkgate_mcp
-from splunkgate_core.verdict import Verdict
+from splunkgate_core.verdict import Severity, Verdict, VerdictLabel
 from splunkgate_mcp.otel import MCP_PROTOCOL_VERSION, build_span_attributes
 from splunkgate_mcp.schemas import VERDICT_OUTPUT_SCHEMA
 from splunkgate_mcp.server import _REGISTERED_TOOLS, register_tool, server
@@ -38,25 +41,33 @@ def test_server_module_imports_official_mcp_sdk() -> None:
     assert type(server).__module__.startswith("mcp.")
 
 
-def test_register_tool_adds_to_internal_registry() -> None:
-    """register_tool populates _REGISTERED_TOOLS with a RegisteredTool entry."""
-    # Clean slate for the test
+def test_register_tool_uses_fastmcp_derived_schemas() -> None:
+    """register_tool sources schemas from FastMCP, not from kwargs.
+
+    This is the wire-truth contract: RegisteredTool.outputSchema reflects
+    what MCP clients see, not what we passed in. Test fn returns a Verdict
+    so FastMCP derives VERDICT_OUTPUT_SCHEMA correctly.
+    """
     _REGISTERED_TOOLS.clear()
+    # Also clear FastMCP's internal registry so re-registration doesn't collide
+    server._tool_manager._tools.pop("_test_tool", None)  # noqa: SLF001
 
-    async def noop_fn(args: dict[str, object]) -> dict[str, object]:  # noqa: ARG001
-        return {"verdict": "ALLOW"}
+    async def typed_fn() -> Verdict:
+        return Verdict(
+            trace_id=uuid4(),
+            timestamp=datetime.now(UTC),
+            verdict=VerdictLabel.ALLOW,
+            severity=Severity.NONE_SEVERITY,
+            rules=[],
+            surface="mcp_score",
+            latency_ms=0.0,
+        )
 
-    register_tool(
-        name="_test_tool",
-        fn=noop_fn,
-        input_schema={"type": "object"},
-        output_schema=VERDICT_OUTPUT_SCHEMA,
-        description="Test tool",
-    )
+    register_tool(name="_test_tool", fn=typed_fn, description="Test tool")
 
     assert "_test_tool" in _REGISTERED_TOOLS
     entry = _REGISTERED_TOOLS["_test_tool"]
     assert entry.name == "_test_tool"
+    # FastMCP derived the schema from the typed return — must equal VERDICT_OUTPUT_SCHEMA
     assert entry.outputSchema == VERDICT_OUTPUT_SCHEMA
-    assert entry.input_schema == {"type": "object"}
     assert callable(entry.fn)
