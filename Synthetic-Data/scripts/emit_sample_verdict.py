@@ -247,7 +247,7 @@ def _synthesize_verdict(
         "latency_ms": latency_ms,
         "agent_id": _agent_id(rng),
     }
-    aux_fields = {
+    aux_fields: dict[str, Any] = {
         "model_name": _model_name(rng),
         "jurisdictional_tag": _jurisdictional_tag(rng),
         # Token cost — what the LLM inference WOULD have used.
@@ -256,8 +256,34 @@ def _synthesize_verdict(
         # actual model spend. Borrowed from TruongSinhAI/splunk-token-optimizer
         # — token-progressive-disclosure pattern as a dashboard narrative.
         "tokens_used": str(_tokens_used(rng)),
+        # OTel attributes that production splunkgate_core/otel.py would emit
+        # via the splunklib HEC exporter. Mirroring them here so the
+        # Splunk app's props.conf FIELDALIAS surfaces them onto flat field
+        # names (verdict_label, surface, trace_id, rule, agent_id, etc.).
+        # Without these, dashboards search `verdict_label=block` and find
+        # zero events — the Verdict payload has `verdict="BLOCK"` but no
+        # `gen_ai.evaluation.score.label` for the FIELDALIAS to lift.
+        "gen_ai.evaluation.name": "splunkgate.safety_verdict",
+        "gen_ai.evaluation.score.label": label.lower(),
+        "gen_ai.evaluation.score.value": _SEVERITY_TO_SCORE[severity],
+        "gen_ai.evaluation.explanation": verdict_payload["explanation"],
+        "splunkgate.surface": surface,
+        "splunkgate.trace_id": verdict_payload["trace_id"],
+        "splunkgate.agent_id": verdict_payload["agent_id"],
+        "splunkgate.rules": [r["rule"] for r in rules],
     }
     return verdict_payload, aux_fields
+
+
+# Severity → score mapping mirrors splunkgate_core/otel.py:_SEVERITY_SCORE
+# so dashboards' EVAL-severity (case(severity_score>=1.0, "HIGH", ...))
+# produces the same buckets the synthetic generator picks.
+_SEVERITY_TO_SCORE: dict[str, float] = {
+    "NONE_SEVERITY": 0.0,
+    "LOW": 0.33,
+    "MEDIUM": 0.66,
+    "HIGH": 1.0,
+}
 
 
 def _tokens_used(rng: random.Random) -> int:
