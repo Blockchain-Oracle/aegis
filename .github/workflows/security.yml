@@ -35,7 +35,17 @@ jobs:
       # --strict dropped: pip-audit treats every --skip-editable result as an
       # error under --strict (incompatible with uv workspace layouts). Without
       # --strict, vulns still fail the run; only Skip-rows are non-fatal.
-      - run: uv run --with pip-audit pip-audit --skip-editable
+      #
+      # --ignore-vuln PYSEC-2026-87: lxml<6.1.0 XXE — fix only in lxml 6.x.
+      # `splunk-appinspect==4.2.1` pins `lxml<6.0.0,>=5.3.0`, so we cannot
+      # bump lxml without bumping AppInspect (no release after 4.2.1 exists).
+      # SplunkGate code does NOT use lxml directly; the only consumer is
+      # `splunk-appinspect` itself, running in CI against our OWN app source
+      # under our control. The XXE path requires an attacker to inject
+      # malicious XML into splunk_apps/splunkgate_app/ — which would already
+      # be caught at PR review. Acceptable risk; lift when AppInspect ships
+      # a release with lxml>=6.1.0.
+      - run: uv run --with pip-audit pip-audit --skip-editable --ignore-vuln PYSEC-2026-87
 
   gitleaks:
     name: gitleaks
