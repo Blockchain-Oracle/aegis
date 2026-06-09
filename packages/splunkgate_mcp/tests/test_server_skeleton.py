@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import splunkgate_mcp
 from splunkgate_core.verdict import Severity, Verdict, VerdictLabel
+from splunkgate_mcp._test_helpers import list_tools_for_test
 from splunkgate_mcp.otel import MCP_PROTOCOL_VERSION, build_span_attributes
 from splunkgate_mcp.schemas import VERDICT_OUTPUT_SCHEMA
 from splunkgate_mcp.server import _REGISTERED_TOOLS, register_tool, server
@@ -71,3 +72,28 @@ def test_register_tool_uses_fastmcp_derived_schemas() -> None:
     # FastMCP derived the schema from the typed return — must equal VERDICT_OUTPUT_SCHEMA
     assert entry.outputSchema == VERDICT_OUTPUT_SCHEMA
     assert callable(entry.fn)
+
+
+def test_list_tools_for_test_returns_registered_tools() -> None:
+    """_test_helpers exposes the internal registry without async FastMCP surface."""
+    _REGISTERED_TOOLS.clear()
+    server._tool_manager._tools.pop("_helper_test", None)  # noqa: SLF001
+
+    async def typed_fn() -> Verdict:
+        return Verdict(
+            trace_id=uuid4(),
+            timestamp=datetime.now(UTC),
+            verdict=VerdictLabel.ALLOW,
+            severity=Severity.NONE_SEVERITY,
+            rules=[],
+            surface="mcp_score",
+            latency_ms=0.0,
+        )
+
+    register_tool(name="_helper_test", fn=typed_fn, description="x")
+
+    tools = list_tools_for_test()
+    names = [t.name for t in tools]
+    assert "_helper_test" in names
+    target = next(t for t in tools if t.name == "_helper_test")
+    assert target.outputSchema == VERDICT_OUTPUT_SCHEMA
