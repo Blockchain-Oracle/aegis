@@ -278,21 +278,21 @@ stories:
     status: COMPLETE
     pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/96"
     merged_at: "2026-06-06T01:30:00Z"
-    notes: "Dashboard Studio v2, dark theme, 8 visualizations (4 KPI + area + column heatmap + table + MSJ line), 8 dataSources token-bound to input_time, drilldowns to verdict_inspector via $click.x.value$ + $click.name2$ + $row.agent_id$ tokens. Reviewer caught 4 bugs pre-merge: version=2 not 2.0 (silent-render), ds_msj override clobber, $row._time$ on charts, rowNumbers string."
+    notes: "Dashboard Studio v2, dark theme, 8 visualizations (4 KPI + area + column heatmap + table + MSJ line), 8 dataSources token-bound to input_time, drilldowns to verdict_inspector via $click.x.value$ + $click.name2$ + $row.agent_id$ tokens. Reviewer caught 4 bugs pre-merge: version=2 not 2.0 (silent-render), ds_msj override clobber, $row._time$ on charts, rowNumbers string. POST-MERGE (PR #113, 2026-06-09): live-container browser verification revealed 3 stacked bugs preventing real-data rendering — (a) FIELDALIAS broken on dotted JSON paths (fixed: EVAL with single-quoted dotted source refs), (b) EVAL-X stanzas don't chain (fixed: read source attribute directly), (c) splunkgate_data macro double-`search` bug with Dashboard Studio auto-prepend (fixed: macro is now filter-only). Dashboard now renders 500/82/87/9/73,283 across 5 KPI tiles with full timechart + heatmap + top-agents data."
     depends_on: [story-app-03-savedsearches-and-mltk-macros]
   - id: story-app-06-dashboard-verdict-inspector
     epic: "EPIC-09 — Surface 4 Splunk app"
     status: COMPLETE
     pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/97"
     merged_at: "2026-06-06T02:15:00Z"
-    notes: "Dashboard Studio v2, 5 inputs matching the token contract from app-05's drilldowns, 4 visualizations (filter bar / verdict table / detail panel / related events). Row click sets row_trace_id + row_agent_id tokens. Open-in-ES button drills into Investigation Workbench via form.search=trace_id pattern. Reviewer caught 3 silent-render bugs pre-merge: unquoted trace_id substitution, broken rule-filter OR clause, wrong ES URL form."
+    notes: "Dashboard Studio v2, 5 inputs matching the token contract from app-05's drilldowns, 4 visualizations (filter bar / verdict table / detail panel / related events). Row click sets row_trace_id + row_agent_id tokens. Open-in-ES button drills into Investigation Workbench via form.search=trace_id pattern. Reviewer caught 3 silent-render bugs pre-merge: unquoted trace_id substitution, broken rule-filter OR clause, wrong ES URL form. POST-MERGE (PR #113, 2026-06-09): same 3 stacked bugs as app-05 — fix lands the verdict table with real rows and the active-filters ribbon expanding tokens correctly."
     depends_on: [story-app-03-savedsearches-and-mltk-macros, story-app-04-collections-conf-kvstore-verdict-history]
   - id: story-app-07-dashboard-regulator-evidence-pack
     epic: "EPIC-09 — Surface 4 Splunk app"
     status: COMPLETE
     pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/99"
     merged_at: "2026-06-06T03:30:00Z"
-    notes: "Examiner-grade audit dashboard. 8 visualizations including verbatim SR 26-2 footnote 3 + NIST RMF mapping + EU AI Act Article 6. Profile-gated HIPAA + PCI panels with showNoData empty-state explanation. Browser-print PDF export (pdfgen doesn't render DS-v2 universally). First PR to run the full multi-reviewer pattern (code-reviewer + comment-analyzer + silent-failure-hunter) — caught 6 bugs that would have shipped silently broken."
+    notes: "Examiner-grade audit dashboard. 8 visualizations including verbatim SR 26-2 footnote 3 + NIST RMF mapping + EU AI Act Article 6. Profile-gated HIPAA + PCI panels with showNoData empty-state explanation. Browser-print PDF export (pdfgen doesn't render DS-v2 universally). First PR to run the full multi-reviewer pattern (code-reviewer + comment-analyzer + silent-failure-hunter) — caught 6 bugs that would have shipped silently broken. POST-MERGE (PR #113, 2026-06-09): same 3 stacked bugs as app-05/app-06 — static NIST + EU AI Act mapping tables and dynamic KPI queries (total/unique/attested = 500/500/500) all render once the macro and EVAL chain are fixed."
     depends_on: [story-app-03-savedsearches-and-mltk-macros, story-app-04-collections-conf-kvstore-verdict-history]
   - id: story-app-08-risk-factors-conf-es-rba-integration
     epic: "EPIC-09 — Surface 4 Splunk app"
