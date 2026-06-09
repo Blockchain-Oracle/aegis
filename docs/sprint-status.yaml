@@ -167,8 +167,11 @@ stories:
     notes: "First EPIC-06 PR. 4 middleware stubs verified against splunklib.ai 3.0.0 contract."
   - id: story-mw-02-tool-middleware-with-defenseclaw-args
     epic: "EPIC-06 — Surface 1 middleware"
-    status: PENDING
+    status: COMPLETE  # 2026-06-09 — shipped via PR #121; replaces stub from story-mw-01.
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/121"
+    merged_at: "2026-06-09T13:55:24Z"
     depends_on: [story-mw-01-package-skeleton-and-public-api, story-judges-05-ai-defense-end-to-end-integration-test]
+    notes: "Surface-1 counterpart to MCP splunkgate_judge_tool_call (PR #118). DefenseClaw cheap-pass + AI Defense escalation chain, mirrors SafetyModelMiddleware DI pattern. 4 pr-review-toolkit reviewers in parallel: code-reviewer + type-design-analyzer both SHIP IT; silent-failure-hunter caught 3 BLOCKING + 4 IMPORTANT silent-failure traps (the exact PR-#116/#117/#118/#119 shapes reappearing): (B1) _safe_emit missing — raw emit_verdict_event would drop the audit row on exporter crash, (B2) AI Defense timeout bypassed audit trail — fixed via fail-closed BLOCK + ai_defense_unavailable rule + ai_defense.escalation_failed WARN, (B3) _rewrite_request accepted empty {} sanitized_args — fixed with explicit non-empty check + modify.empty_sanitized_args WARN, (I4 — THE PR-#117 SHAPE) compose_sanitized produced byte-identical output for unmapped AI Defense rules → MODIFY shipped dangerous payload — fixed with is_supported_rule() guard + force-BLOCK on unmapped rules. Extracted _fail_closed.py module (160 LOC non-blank-non-comment) consolidating safe_emit + cheap_hit_severity + FailClosedError + run_escalation + run_cheap_pass as a first-class building block for future middleware (mw-07 profiles can adopt without reinventing WARN keys). pr-test-analyzer caught 3 BLOCKING test gaps including MODIFY-via-real-DefenseClaw (no monkeypatch) and is_safe=True clear-cheap-hit — both fixed via 8 new regression tests in test_tool_middleware_failclosed.py. 25 mw-02 tests total; 401 monorepo-wide. CLOSES the only 'pending — see story-mw-02' equivalence-table entry in docs/integrations/README.md (flipped in same PR)."
   - id: story-mw-03-model-middleware-pre-inference-scan
     epic: "EPIC-06 — Surface 1 middleware"
     status: COMPLETE
