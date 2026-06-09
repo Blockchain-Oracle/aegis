@@ -39,8 +39,10 @@ stories:
     merged_at: "2026-06-03T10:15:00Z"
   - id: story-cicd-05-appinspect-gate
     epic: "EPIC-01 — CI/CD foundation"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-cicd-01-build-pipeline-python-wheels, story-app-01-app-conf-and-metadata-skeleton]
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/122"
+    merged_at: "2026-06-09T14:18:27Z"
   - id: story-cicd-06-eval-smoke-job
     epic: "EPIC-01 — CI/CD foundation"
     status: PENDING
