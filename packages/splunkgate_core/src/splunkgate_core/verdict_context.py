@@ -15,10 +15,11 @@ Used by:
 - splunkgate_mcp tool handlers
 """
 
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+from splunkgate_core.verdict import Surface
 
 
 class VerdictContext(BaseModel):
@@ -31,13 +32,7 @@ class VerdictContext(BaseModel):
     model_name: str
     system_prompt_summary: str
     recent_messages: list[str]
-    surface: Literal[
-        "mw_model",
-        "mw_tool",
-        "mw_subagent",
-        "mcp_score",
-        "mcp_judge_tool",
-        "mcp_check_output",
-        "mcp_audit",
-        "defenseclaw",
-    ]
+    # Imported from splunkgate_core.verdict so the two model classes share
+    # the same Literal set — prevents drift caught by silent-failure-hunter +
+    # type-design-analyzer on PR #115.
+    surface: Surface

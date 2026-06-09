@@ -206,7 +206,7 @@ stories:
   # EPIC-07 — Surface 2 (SplunkGate MCP Server)
   - id: story-mcp-01-server-skeleton-with-mcp-python-sdk
     epic: "EPIC-07 — Surface 2 MCP Server"
-    status: PENDING
+    status: IN_PROGRESS
     depends_on: [story-core-01-verdict-pydantic-types]
   - id: story-mcp-02-tool-score-prompt-injection
     epic: "EPIC-07 — Surface 2 MCP Server"
