@@ -13,11 +13,10 @@ Per-label branch:
   - MODIFY → reissue the tool with `verdict.modifications["sanitized_args"]`;
              the original args never reach the downstream tool.
 
-The runtime backend `splunkgate_judges.defenseclaw_backend.evaluate_tool_call`
-is the cheap first-pass classifier. When it hits + the caller configured
-`escalate_on_first_pass_hit=True`, this module escalates to Cisco AI
-Defense's Inspection API for the authoritative verdict, mirroring the
-SafetyModelMiddleware pattern in `model_middleware.py`.
+Backend failures (DefenseClaw crash, AI Defense network error, OTel
+exporter crash) DO NOT propagate; they get converted to fail-closed
+BLOCK verdicts so the audit row is preserved. A network blip CANNOT
+silently let a dangerous tool call through. See `_fail_closed.py`.
 """
 
 from __future__ import annotations
@@ -31,13 +30,17 @@ from uuid import uuid4
 
 import structlog
 from splunkgate_core.errors import SplunkGateError, ToolBlockedBySplunkGate
-from splunkgate_core.otel import emit_verdict_event
 from splunkgate_core.verdict import RuleHit, Severity, Verdict, VerdictLabel
-from splunkgate_judges.defenseclaw_backend import evaluate_tool_call
 from splunklib.ai.middleware import AgentMiddleware, ToolRequest, ToolResponse
 
-from splunkgate_mw._sanitize import compose_sanitized, sanitize_args
-from splunkgate_mw._serialization import serialize_tool_call
+from splunkgate_mw._fail_closed import (
+    FailClosedError,
+    fail_closed_verdict,
+    run_cheap_pass,
+    run_escalation,
+    safe_emit,
+)
+from splunkgate_mw._sanitize import compose_sanitized, is_supported_rule, sanitize_args
 from splunkgate_mw.config import Config
 from splunkgate_mw.profiles import Profile
 
@@ -45,7 +48,6 @@ if TYPE_CHECKING:
     from uuid import UUID
 
     from splunkgate_judges.ai_defense_types import InspectRequest, InspectResponse
-    from splunklib.ai.messages import ToolCall
 
 
 __all__ = [
@@ -56,15 +58,14 @@ __all__ = [
 
 _logger = structlog.get_logger(__name__)
 
-# Surface alias is locked: every Verdict from this chain reports
-# `surface="mw_tool"` so Splunk dashboards filtering on the literal
-# stay stable across releases.
 _SURFACE = "mw_tool"
 
 _MSG_MISSING_SANITIZED_ARGS = (
     "MODIFY verdict on tool call missing modifications['sanitized_args']; "
     "the contract requires sanitized args when label is MODIFY"
 )
+
+_MSG_EMPTY_SANITIZED_ARGS = "MODIFY produced empty sanitized_args for non-empty input"
 
 
 class AIDefenseLike(Protocol):
@@ -81,12 +82,13 @@ ToolMiddlewareHandler = Callable[[ToolRequest], Awaitable[ToolResponse]]
 
 @dataclass(frozen=True, kw_only=True)
 class _VerdictCtx:
-    """Bundle the four identity fields every verdict-build helper needs."""
+    """Bundle the identity fields every verdict-build helper needs."""
 
     trace_uuid: UUID
     now: datetime
     latency_ms: float
     tool_args: dict[str, object]
+    tool_name: str
 
 
 def _allow_verdict(trace_uuid: UUID, now: datetime, latency_ms: float) -> Verdict:
@@ -140,26 +142,42 @@ def _ai_defense_verdict(
     """Translate an AI Defense escalation response into a Verdict.
 
     The cheap-pass DefenseClaw hit is always preserved as the first rule
-    entry — AI Defense rules append after. This gives operators a clear
-    audit trail: "DefenseClaw caught it first, AI Defense confirmed it."
+    entry — AI Defense rules append after. If AI Defense returns any rule
+    outside our v1 redactor map (Code Detection, Harassment, etc.), the
+    MODIFY branch would silently ship byte-identical sanitized_args (the
+    PR #117 `_redact` no-op shape). Force BLOCK instead — fail closed
+    rather than ship a dangerous payload that looks redacted.
     """
     if response.is_safe:
-        # AI Defense cleared a DefenseClaw cheap hit. Conservative: respect
-        # the cheap-pass match and keep the BLOCK/MODIFY branch — the
-        # rule-pack subset is intentionally narrow + high-precision.
         return _cheap_only_verdict(cheap_hit, ctx)
     ai_defense_rules = [
         RuleHit(rule=str(r.rule_name.value), confidence=1.0, source="ai_defense")
         for r in response.rules
     ]
     severity = Severity(response.severity.value)
-    if cheap_hit.rule == "Shell Injection" or severity is Severity.HIGH:
+    rule_names = [str(r.rule_name.value) for r in response.rules]
+    unmapped = [r for r in rule_names if not is_supported_rule(r)]
+    explanation: str | None
+    if cheap_hit.rule == "Shell Injection" or severity is Severity.HIGH or unmapped:
+        if unmapped:
+            _logger.warning(
+                "compose_sanitized.unmapped_rule_forced_block",
+                trace_id=str(ctx.trace_uuid),
+                tool_name=ctx.tool_name,
+                unmapped_rules=unmapped,
+            )
+            explanation = (
+                f"AI Defense rules {unmapped} have no v1 redactor — "
+                "failing closed instead of MODIFY"
+            )
+        else:
+            explanation = response.explanation
         label = VerdictLabel.BLOCK
         modifications: dict[str, object] | None = None
     else:
         label = VerdictLabel.MODIFY
-        rule_names = [str(r.rule_name.value) for r in response.rules]
         modifications = {"sanitized_args": compose_sanitized(ctx.tool_args, rule_names)}
+        explanation = response.explanation
     return Verdict(
         trace_id=ctx.trace_uuid,
         timestamp=ctx.now,
@@ -169,30 +187,25 @@ def _ai_defense_verdict(
         modifications=modifications,
         surface=_SURFACE,
         latency_ms=ctx.latency_ms,
-        explanation=response.explanation,
+        explanation=explanation,
     )
 
 
-async def _escalate_to_ai_defense(
+def _build_ctx(
     *,
-    call: ToolCall,
-    ai_defense: AIDefenseLike,
     trace_uuid: UUID,
-) -> InspectResponse:
-    """Compose + POST the Inspection request via the injected client."""
-    from splunkgate_judges.ai_defense_types import (  # noqa: PLC0415 — lazy import
-        InspectConfig,
-        InspectMessage,
-        InspectRequest,
+    now: datetime,
+    started: float,
+    tool_args: dict[str, object],
+    tool_name: str,
+) -> _VerdictCtx:
+    return _VerdictCtx(
+        trace_uuid=trace_uuid,
+        now=now,
+        latency_ms=(time.perf_counter() - started) * 1000,
+        tool_args=tool_args,
+        tool_name=tool_name,
     )
-
-    body = serialize_tool_call(call)
-    req = InspectRequest(
-        messages=[InspectMessage(role="user", content=body)],
-        metadata={"tool_name": call.name},
-        config=InspectConfig(),
-    )
-    return await ai_defense.inspect_chat(req, trace_id=str(trace_uuid))
 
 
 async def judge_tool_call(
@@ -205,14 +218,12 @@ async def judge_tool_call(
 
     Routes (call.name, call.args) through DefenseClaw's cheap rule-pack;
     if a hit fires + `config.escalate_on_first_pass_hit` is True + an
-    `ai_defense` client is wired, escalates to AI Defense Inspection API
-    for the authoritative verdict. Otherwise routes the cheap hit directly
-    via `_cheap_only_verdict`. Returns ALLOW when cheap path is clean —
-    AI Defense is NOT called on clean payloads (would burn the 10M/year
-    quota for no signal gain).
+    `ai_defense` client is wired, escalates to AI Defense Inspection API.
+    Returns ALLOW when cheap path is clean — AI Defense is NOT called
+    on clean payloads (would burn the 10M/year quota for no signal gain).
 
-    `profile` is bound only to the structlog context for now — the profile
-    registry (story-mw-07) will tune rule weights here later.
+    Backend failures convert to fail-closed BLOCK via `_fail_closed.run_*`
+    helpers. `profile` is bound to the structlog context for now.
     """
     call = request.call
     trace_uuid = uuid4()
@@ -220,39 +231,46 @@ async def judge_tool_call(
     started = time.perf_counter()
     tool_args = dict(call.args)
 
-    cheap_hit = await evaluate_tool_call(call.name, tool_args)
+    try:
+        cheap_hit = await run_cheap_pass(call, tool_args, trace_uuid)
 
-    if cheap_hit is None:
-        latency_ms = (time.perf_counter() - started) * 1000
-        _logger.debug(
-            "tool_middleware.allow",
-            trace_id=str(trace_uuid),
+        if cheap_hit is None:
+            latency_ms = (time.perf_counter() - started) * 1000
+            _logger.debug(
+                "tool_middleware.allow",
+                trace_id=str(trace_uuid),
+                tool_name=call.name,
+                profile=profile.name,
+            )
+            return _allow_verdict(trace_uuid, now, latency_ms)
+
+        ctx = _build_ctx(
+            trace_uuid=trace_uuid,
+            now=now,
+            started=started,
+            tool_args=tool_args,
             tool_name=call.name,
-            profile=profile.name,
         )
-        return _allow_verdict(trace_uuid, now, latency_ms)
 
-    if not config.escalate_on_first_pass_hit or ai_defense is None:
-        ctx = _VerdictCtx(
+        if not config.escalate_on_first_pass_hit or ai_defense is None:
+            return _cheap_only_verdict(cheap_hit, ctx)
+
+        response = await run_escalation(call, cheap_hit, ai_defense, trace_uuid)
+        ctx = _build_ctx(
+            trace_uuid=trace_uuid,
+            now=now,
+            started=started,
+            tool_args=tool_args,
+            tool_name=call.name,
+        )
+        return _ai_defense_verdict(response, cheap_hit, ctx)
+    except FailClosedError as fc:
+        return fail_closed_verdict(
+            fc,
             trace_uuid=trace_uuid,
             now=now,
             latency_ms=(time.perf_counter() - started) * 1000,
-            tool_args=tool_args,
         )
-        return _cheap_only_verdict(cheap_hit, ctx)
-
-    response = await _escalate_to_ai_defense(
-        call=call,
-        ai_defense=ai_defense,
-        trace_uuid=trace_uuid,
-    )
-    ctx = _VerdictCtx(
-        trace_uuid=trace_uuid,
-        now=now,
-        latency_ms=(time.perf_counter() - started) * 1000,
-        tool_args=tool_args,
-    )
-    return _ai_defense_verdict(response, cheap_hit, ctx)
 
 
 class SafetyToolMiddleware(AgentMiddleware):  # type: ignore[misc]
@@ -296,7 +314,7 @@ class SafetyToolMiddleware(AgentMiddleware):  # type: ignore[misc]
             self._config,
             self._ai_defense,
         )
-        emit_verdict_event(verdict)
+        safe_emit(verdict)
 
         if verdict.verdict is VerdictLabel.BLOCK:
             self._logger.warning(
@@ -324,12 +342,22 @@ class SafetyToolMiddleware(AgentMiddleware):  # type: ignore[misc]
 def _rewrite_request(request: ToolRequest, verdict: Verdict) -> ToolRequest:
     """Replace request.call.args with verdict.modifications['sanitized_args'].
 
-    Raises SplunkGateError if `sanitized_args` is missing — silently passing
-    through original args would defeat the MODIFY contract.
+    Raises SplunkGateError if `sanitized_args` is missing OR empty when
+    the original args were non-empty — silently passing through original
+    args OR shipping `{}` to the downstream tool both defeat the MODIFY
+    contract.
     """
     mods = verdict.modifications or {}
     sanitized = mods.get("sanitized_args")
     if not isinstance(sanitized, dict):
         raise SplunkGateError(_MSG_MISSING_SANITIZED_ARGS)
+    if not sanitized and request.call.args:
+        _logger.warning(
+            "modify.empty_sanitized_args",
+            trace_id=str(verdict.trace_id),
+            tool_name=request.call.name,
+            original_keys=sorted(request.call.args.keys()),
+        )
+        raise SplunkGateError(_MSG_EMPTY_SANITIZED_ARGS)
     new_call = replace(request.call, args=sanitized)
     return replace(request, call=new_call)

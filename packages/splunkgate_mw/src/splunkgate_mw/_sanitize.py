@@ -16,7 +16,11 @@ from __future__ import annotations
 import re
 from typing import Final
 
-__all__ = ["compose_sanitized", "sanitize_args"]
+import structlog
+
+__all__ = ["compose_sanitized", "is_supported_rule", "sanitize_args"]
+
+_logger = structlog.get_logger(__name__)
 
 
 _RULE_PATTERNS: Final[dict[str, list[re.Pattern[str]]]] = {
@@ -29,6 +33,19 @@ _RULE_PATTERNS: Final[dict[str, list[re.Pattern[str]]]] = {
         re.compile(r"\b(?:\d[ -]*?){12,18}\d\b"),
     ],
 }
+
+
+def is_supported_rule(rule: str) -> bool:
+    """Return True iff `compose_sanitized` has a v1 redactor for `rule`.
+
+    Used by the verdict-assembly layer to detect AI Defense rules outside
+    our redactor map (e.g., Code Detection, Harassment, Hate Speech,
+    Profanity) BEFORE assembling MODIFY. Without this guard the loop
+    in `_sanitize_string` would iterate zero times for the unmapped
+    rule, return the input unchanged, and ship MODIFY with a byte-
+    identical sanitized_args — the PR #117 silent-no-op shape.
+    """
+    return rule in _RULE_PATTERNS
 
 
 def sanitize_args(tool_args: dict[str, object], rule: str) -> dict[str, object]:
@@ -62,6 +79,16 @@ def _sanitize_value(value: object, rule: str, token: str) -> object:
         return [_sanitize_value(v, rule, token) for v in value]
     if isinstance(value, tuple):
         return tuple(_sanitize_value(v, rule, token) for v in value)
+    # Non-string scalars (int / bool / float / None) pass silently — they
+    # can't carry a regex-matchable PII / PCI substring. Anything ELSE
+    # (set / frozenset / dataclass / custom object) is unusual on a
+    # tool-call arg shape; WARN so operators can surface the drift.
+    if not isinstance(value, int | float | bool | type(None)):
+        _logger.warning(
+            "sanitize.unhandled_container",
+            rule=rule,
+            value_type=type(value).__name__,
+        )
     return value
 
 
