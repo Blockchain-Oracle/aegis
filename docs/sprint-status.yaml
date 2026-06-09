@@ -241,9 +241,11 @@ stories:
     notes: "Splunk REST oneshot search via USER+PASSWORD basic auth (not HEC token — wrong scope for /services/search/jobs). AuditReport.aggregate typed dict[str, object] (NOT Any). Tool emits AuditReport — the only non-Verdict-returning MCP tool. 5-reviewer fleet caught silent-failures on _coerce_label/_severity/_surface (would falsify Regulator Evidence Pack labels) + Splunk 200+FATAL body masquerade — both fixed via WARN logs + _check_splunk_messages helper. SPL injection guard via _ALLOWED_DIMENSIONS frozenset. SPLUNKGATE_DEV_INSECURE_TLS=1 opt-in mirrors otel_hec_exporter pattern. Closes the 4-tool MCP track per design doc Phase A0."
   - id: story-mcp-06-claude-desktop-cursor-config-examples
     epic: "EPIC-07 — Surface 2 MCP Server"
-    status: PENDING
-    depends_on: [story-mcp-02-tool-score-prompt-injection, story-mcp-03-tool-judge-tool-call]
-    notes: "2026-06-05 — depends_on trimmed to drop deferred mcp-04 + mcp-05 per ADR-013. Example MCP-client config now references the live Splunk MCP Server (Splunkbase app 7931) alongside splunkgate_* tools — the concrete MCP coexistence story for judges."
+    status: COMPLETE  # 2026-06-09 — shipped via PR #120; depends_on widened to include reopened mcp-04 + mcp-05 per ADR-013a (PR #114).
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/120"
+    merged_at: "2026-06-09T12:58:12Z"
+    depends_on: [story-mcp-02-tool-score-prompt-injection, story-mcp-03-tool-judge-tool-call, story-mcp-04-tool-check-output-leak, story-mcp-05-tool-audit-trace]
+    notes: "Docs-only story (3 markdown + 3 JSON example files under docs/integrations/). 4 pr-review-toolkit reviewers ran in parallel: code-reviewer + comment-analyzer both said SHIP IT; silent-failure-hunter caught 2 BLOCKING credibility traps — (1) MOCK mode wasn't warning verdicts are FAKE (a judge would paste config, send real injection, see ALLOW, conclude SplunkGate failed) and (2) 'tools don't appear' troubleshooting under-specified the log grep targets. Both fixed in commit 1f5a521 with a MOCK callout in both per-client docs + README + 3 targeted grep recipes (splunkgate_mcp, ai_defense.startup, audit_trace.coerce_miss|redaction.miss). Also added literal ConfigError + Origin-403 response-body shapes for grep targeting. simplification-reviewer's BLOCKINGs rejected with rationale (spec L23/L24 mandate the 6+5 troubleshooting entries verbatim). Tool-equivalence table honestly marks splunkgate_judge_tool_call as 'pending — see story-mw-02' (HALLUCINATION-AUDIT discipline; SafetyToolMiddleware is a pass-through stub at _base.py:78) and splunkgate_audit_trace as 'no Surface-1 counterpart'. CLOSES the 4-tool MCP runtime track per design doc Phase A0."
 
   # EPIC-08 — Surface 3 (DefenseClaw integration)
   - id: story-dc-01-config-delta-docs-and-example
