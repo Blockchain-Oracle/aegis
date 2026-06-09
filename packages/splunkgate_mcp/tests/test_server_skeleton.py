@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -31,6 +33,9 @@ from splunkgate_mcp.server import (
     resolve_transport,
     serve_stdio,
     server,
+)
+from splunkgate_mcp.server import (
+    _ping as ping,
 )
 from starlette.testclient import TestClient
 
@@ -294,3 +299,36 @@ def test_origin_attacker_host_rejected() -> None:
 
     assert _is_allowed_origin("http://127.0.0.1.attacker.com") is False
     assert _is_allowed_origin("http://localhost.attacker.com") is False
+
+
+def test_ping_returns_mcp_health_surface() -> None:
+    """_ping uses the dedicated `mcp_health` surface, NOT `mcp_score`.
+
+    Locks the dashboard-faceting contract: health-probe verdicts must
+    not pollute the scoring-surface counters (story-app-05/-08). Caught
+    by pr-test-analyzer re-review.
+    """
+    result = asyncio.run(ping())
+    assert result.surface == "mcp_health"
+
+
+def test_main_config_error_exits_2() -> None:
+    """ConfigError from resolve_transport() → exit code 2 + clean stderr.
+
+    Locks the operator-facing exit-code contract caught by
+    pr-test-analyzer re-review. Operators (systemd / k8s) read these
+    codes to decide whether to restart.
+    """
+    env = dict(os.environ)
+    env["SPLUNKGATE_MCP_TRANSPORT"] = "ftp"
+    result = subprocess.run(
+        [sys.executable, "-m", "splunkgate_mcp"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 2, f"stderr: {result.stderr!r}"
+    assert "configuration error" in result.stderr.lower()
+    assert "SPLUNKGATE_MCP_TRANSPORT" in result.stderr

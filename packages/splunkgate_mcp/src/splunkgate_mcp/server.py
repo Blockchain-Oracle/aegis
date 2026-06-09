@@ -297,12 +297,20 @@ def _is_allowed_origin(origin_header: str | None) -> bool:
     cleaned = origin_header.strip()
     if not cleaned:
         return False
-    parts = urlsplit(cleaned)
+    # urlsplit raises ValueError on out-of-range ports (e.g.
+    # "http://x:99999") and a handful of other syntactic edge cases.
+    # Reject defensively — the alternative is a 500 propagating up
+    # through Starlette (silent-failure-hunter caught this on re-review
+    # of PR #115).
+    try:
+        parts = urlsplit(cleaned)
+        host = parts.hostname  # bracket-less for IPv6; lowercased
+    except ValueError:
+        return False
     if parts.scheme.lower() not in _ALLOWED_ORIGIN_SCHEMES:
         # Wrong scheme (file://, data://, null, etc.) or malformed Origin
         # missing `://` (urlsplit returns empty scheme then).
         return False
-    host = parts.hostname  # bracket-less for IPv6; lowercased for hostnames
     if host is None:
         return False
     return host in _ALLOWED_ORIGIN_HOSTS

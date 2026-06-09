@@ -38,6 +38,24 @@ class Severity(StrEnum):
     HIGH = "HIGH"
 
 
+# Surface is the emit-point identifier carried by every Verdict (and the
+# matching VerdictContext, when an explainer is built). Defined as a
+# shared alias here so the two model classes can't drift — both import
+# from one source of truth. Adding a new surface = add the literal here.
+# All eight surfaces from ADR-005 + the mcp_health probe-only surface.
+Surface = Literal[
+    "mw_model",
+    "mw_tool",
+    "mw_subagent",
+    "mcp_score",
+    "mcp_judge_tool",
+    "mcp_check_output",
+    "mcp_audit",
+    "mcp_health",
+    "defenseclaw",
+]
+
+
 class VerdictLabel(StrEnum):
     """SplunkGate action verdict. Maps to OTel `gen_ai.evaluation.result.score.label`.
 
@@ -82,17 +100,7 @@ class Verdict(BaseModel):
     explanation: str | None = None
     classifications: list[str] = Field(default_factory=list)
     modifications: dict[str, object] | None = None
-    surface: Literal[
-        "mw_model",
-        "mw_tool",
-        "mw_subagent",
-        "mcp_score",
-        "mcp_judge_tool",
-        "mcp_check_output",
-        "mcp_audit",
-        "mcp_health",
-        "defenseclaw",
-    ]
+    surface: Surface
     latency_ms: float
     # agent_id is the logical agent identifier (e.g. splunklib.ai thread_id
     # at the model_middleware integration point). Optional because some
