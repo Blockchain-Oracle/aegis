@@ -90,17 +90,23 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y libmagic1
       - run: uv python install ${{ env.PYTHON_VERSION }}
       - run: uv sync --frozen
-      - run: uv run splunk-appinspect inspect splunk_apps/splunkgate_app/ --output-file appinspect-report.json --mode test --included-tags cloud --included-tags self-service --included-tags appapproval
+      # splunk-appinspect exits non-zero (3) when ANY non-success finding exists
+      # (failure/warning/error). We only block on error severity, so swallow the
+      # tool's exit code and let parse_appinspect.py decide the gate verdict.
+      - name: Run AppInspect (emits JSON; non-zero tool exit is fine — parser gates)
+        run: |
+          uv run splunk-appinspect inspect splunk_apps/splunkgate_app/ \
+            --output-file appinspect-report.json \
+            --mode test \
+            --included-tags cloud --included-tags self-service --included-tags appapproval \
+            || true
+          test -s appinspect-report.json
       - uses: actions/upload-artifact@v4
         with:
           name: appinspect-report
           path: appinspect-report.json
-      - run: |
-          if uv run python .github/scripts/parse_appinspect.py appinspect-report.json; then
-            echo "AppInspect passed (no error-severity findings)"
-          else
-            echo "AppInspect found error-severity issues"; exit 1
-          fi
+      - name: Gate on error-severity findings
+        run: uv run python .github/scripts/parse_appinspect.py appinspect-report.json
 
   build-wheels:
     name: Build wheels
