@@ -7,9 +7,10 @@ partition cleanly in any multi-server MCP client config.
 
 This module owns:
 - The `FastMCP` server instance (the SDK boundary)
-- A `register_tool(name, fn, input_schema, output_schema, description)`
-  helper that (a) wires the tool into the FastMCP protocol surface AND
-  (b) records it in our internal `_REGISTERED_TOOLS` dict
+- A `register_tool(name, fn, description)` helper that (a) wires the tool
+  into FastMCP and (b) mirrors the wire-emitted schemas in our internal
+  `_REGISTERED_TOOLS` dict by reading them back from FastMCP's tool
+  manager after `add_tool` runs (single source of truth)
 - `_REGISTERED_TOOLS: dict[str, RegisteredTool]` — the registry that
   tests enumerate via `splunkgate_mcp._test_helpers.list_tools_for_test`
   (FastMCP's async protocol surface is not a sync registry)
