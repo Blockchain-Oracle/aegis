@@ -393,3 +393,48 @@ async def test_verdict_round_trip_validates_against_output_schema() -> None:
     verdict = await check_output_leak(CheckOutputLeakInputs(output_text="benign text"))
     dumped = verdict.model_dump(mode="json")
     jsonschema.validate(instance=dumped, schema=VERDICT_OUTPUT_SCHEMA)
+
+
+# --- silent-failure-hunter follow-up (PR #117 review) ------------------
+
+
+async def test_redaction_miss_logs_warning(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AI Defense fires PII but our regex doesn't match → WARN logged.
+
+    Per silent-failure-hunter BLOCKING finding on PR #117: when the
+    InspectResponse contains a rule_name we have patterns for but
+    none of the patterns match the actual output, `redacted_output`
+    would equal the original text. Surface 4 dashboards would show
+    green MODIFY tiles while sensitive content leaks downstream
+    verbatim. The fix logs WARN so the regex-coverage gap is visible.
+    """
+    payload = {
+        "is_safe": False,
+        "severity": "LOW",
+        "classifications": ["PRIVACY_VIOLATION"],
+        "rules": [
+            {
+                "rule_name": "PII",
+                "classification": "PRIVACY_VIOLATION",
+                "entity_types": ["FOREIGN_ID"],
+            }
+        ],
+        "explanation": "Detected non-US identifier we have no v1 redactor for.",
+    }
+    # Input has no substrings matching our PII patterns (no SSN
+    # shape, no email, no US phone). AI Defense flags PII anyway.
+    inert_text = "The customer's reference number is foo-bar-baz."
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("SPLUNKGATE_AI_DEFENSE_API_KEY", "x")
+        mp.delenv("SPLUNKGATE_AI_DEFENSE_MOCK", raising=False)
+        with respx.mock() as router:
+            router.post(_LIVE_URL).mock(return_value=httpx.Response(200, json=payload))
+            with caplog.at_level("WARNING"):
+                verdict = await check_output_leak(CheckOutputLeakInputs(output_text=inert_text))
+    # MODIFY stands (AI Defense's word), but the WARN is the visibility signal
+    assert verdict.verdict is VerdictLabel.MODIFY
+    assert any("redaction.miss" in r.message for r in caplog.records), [
+        r.message for r in caplog.records
+    ]

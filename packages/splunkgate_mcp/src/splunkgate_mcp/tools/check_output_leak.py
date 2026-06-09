@@ -29,7 +29,7 @@ import logging
 import re
 import time
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Literal, get_args
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict
@@ -72,15 +72,39 @@ _SURFACE: Literal["mcp_check_output"] = "mcp_check_output"
 # attribute pair `gen_ai.evaluation.result` + `mcp.method.name`.
 _MCP_METHOD: str = "tools/call"
 
+# Sensitivity profile alias — single source of truth shared between the
+# Pydantic input model, the helper signatures, and the _SENSITIVITY_RULES
+# dict key type. Adding a new profile means updating the Literal once;
+# the module-level totality assertion below catches drift if the
+# corresponding _SENSITIVITY_RULES entry is missing.
+Sensitivity = Literal["default", "fsi", "hipaa", "pubsec"]
+
+
 # Sensitivity → enabled_rules mapping per story spec lines 143-147.
 # Locked: dashboards key off the (surface, sensitivity) pair to size the
 # leak-rate panels; changing this map breaks the contract with story-app-05.
-_SENSITIVITY_RULES: dict[str, list[AIDefenseRule]] = {
+_SENSITIVITY_RULES: dict[Sensitivity, list[AIDefenseRule]] = {
     "default": [AIDefenseRule.PII],
     "fsi": [AIDefenseRule.PII, AIDefenseRule.PCI],
     "hipaa": [AIDefenseRule.PII, AIDefenseRule.PHI],
     "pubsec": [AIDefenseRule.PII],
 }
+
+
+# Totality guard: every Sensitivity literal MUST have a corresponding
+# _SENSITIVITY_RULES entry. Caught by type-design-analyzer on PR #117 —
+# adding a new profile to the Literal but forgetting the dict entry
+# would otherwise raise KeyError only at the first call site, not at
+# module import. We raise instead of `assert` because production code
+# is subject to ruff S101 (no asserts) per CLAUDE.md.
+_DECLARED_PROFILES = set(get_args(Sensitivity))
+_MAPPED_PROFILES = set(_SENSITIVITY_RULES.keys())
+if _DECLARED_PROFILES != _MAPPED_PROFILES:
+    msg = (
+        f"_SENSITIVITY_RULES keys {_MAPPED_PROFILES} drift from "
+        f"Sensitivity Literal {_DECLARED_PROFILES}"
+    )
+    raise RuntimeError(msg)
 
 
 # v1 regex patterns keyed by AI Defense rule. The token format
@@ -128,13 +152,13 @@ class CheckOutputLeakInputs(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     output_text: str
-    sensitivity: Literal["default", "fsi", "hipaa", "pubsec"] = "default"
+    sensitivity: Sensitivity = "default"
 
 
 def _build_inspect_request(
     *,
     output_text: str,
-    sensitivity: Literal["default", "fsi", "hipaa", "pubsec"],
+    sensitivity: Sensitivity,
 ) -> InspectRequest:
     """Compose the AI Defense Inspection request for an output-leak check.
 
@@ -164,12 +188,38 @@ def _redact(output_text: str, rules: list[InspectRuleHit]) -> str:
     on the output side) pass through unchanged — AI Defense confirmed
     the hit but we don't have a v1 substring redactor for them; the
     Verdict still reports MODIFY so the caller knows to act.
+
+    **Silent-failure guard** (PR #117 silent-failure-hunter finding):
+    if a rule HAS patterns but NONE matched, AI Defense disagrees with
+    our regex set — a real regex-coverage gap. Log WARN so the gap is
+    visible in dashboards instead of silently shipping unredacted text
+    in `Verdict.modifications.redacted_output`.
     """
     redacted = output_text
     for hit in rules:
         token = f"[REDACTED:{hit.rule_name.value}]"
-        for pattern in _REDACTION_PATTERNS.get(hit.rule_name, []):
+        patterns = _REDACTION_PATTERNS.get(hit.rule_name, [])
+        if not patterns:
+            # Rule has no v1 redactor (e.g. Code Detection). Caller still
+            # sees MODIFY; redacted_output equals output. Acceptable.
+            continue
+        before = redacted
+        for pattern in patterns:
             redacted = pattern.sub(token, redacted)
+        if redacted == before:
+            # AI Defense fired but every pattern missed — surface the
+            # regex-coverage gap instead of silently leaking the text
+            # that Surface 4 dashboards will display as "redacted".
+            _LOGGER.warning(
+                "redaction.miss",
+                extra={
+                    "rule": hit.rule_name.value,
+                    "entity_types": list(hit.entity_types),
+                    "issue": "AI Defense fired but no client-side pattern matched",
+                    "resolution": "redacted_output left unchanged; widen "
+                    "_REDACTION_PATTERNS for this rule",
+                },
+            )
     return redacted
 
 
@@ -242,7 +292,7 @@ def _build_verdict_from_inspect_response(
 async def _call_ai_defense(
     *,
     output_text: str,
-    sensitivity: Literal["default", "fsi", "hipaa", "pubsec"],
+    sensitivity: Sensitivity,
     trace_id: UUID,
 ) -> InspectResponse:
     """Call AI Defense via the env-resolved client.
