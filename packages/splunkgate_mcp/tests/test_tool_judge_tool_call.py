@@ -402,3 +402,73 @@ async def test_classifications_propagated_from_aidefense() -> None:
                 )
             )
     assert "SECURITY_VIOLATION" in verdict.classifications
+
+
+# --- pr-review-toolkit follow-ups (PR #118) -----------------------------
+
+
+async def test_nested_modify_preserves_structure_and_redacts_leaves() -> None:
+    """Nested dict MODIFY path: all keys preserved + leaf string redacted.
+
+    Per pr-test-analyzer suggestion on PR #118: the existing send_email
+    test only exercises flat `{to, body}`. This locks the spec-line-146
+    contract for genuinely nested structures.
+    """
+    nested = {
+        "meta": {"sender": "agent-7", "body": "Patient SSN 123-45-6789"},
+        "audit": {"timestamp": "2026-06-09T12:00:00Z"},
+    }
+    verdict = await judge_tool_call(JudgeToolCallInputs(tool_name="send_report", tool_args=nested))
+    if verdict.verdict is VerdictLabel.MODIFY:
+        suggested = (verdict.modifications or {}).get("suggested_args")
+        assert isinstance(suggested, dict)
+        # Every original outer key survives.
+        assert set(suggested.keys()) == {"meta", "audit"}
+        # Inner keys preserved.
+        assert set(suggested["meta"].keys()) == {"sender", "body"}
+        assert set(suggested["audit"].keys()) == {"timestamp"}
+        # The SSN substring is redacted.
+        assert "123-45-6789" not in suggested["meta"]["body"]
+
+
+async def test_unmapped_aidefense_rule_logs_redaction_miss(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """AI Defense returns HARASSMENT (no v1 redactor) → WARN logged.
+
+    Per silent-failure-hunter BLOCKING finding on PR #118: 8 of 11
+    AIDefenseRule values have no `_REDACTION_PATTERNS` entry. Previously
+    the verdict shipped MODIFY with `suggested_args` byte-identical to
+    input — silent leak masquerading as redaction on Surface 4
+    dashboards. The fix logs WARN `redaction.no_pattern_for_rule`.
+    """
+    payload = {
+        "is_safe": False,
+        "severity": "LOW",
+        "classifications": ["SAFETY_VIOLATION"],
+        "rules": [
+            {
+                "rule_name": "Harassment",
+                "classification": "SAFETY_VIOLATION",
+                "entity_types": [],
+            }
+        ],
+        "explanation": "Harassment detected — no v1 redactor.",
+    }
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setenv("SPLUNKGATE_AI_DEFENSE_API_KEY", "x")
+        mp.delenv("SPLUNKGATE_AI_DEFENSE_MOCK", raising=False)
+        with respx.mock() as router:
+            router.post(_LIVE_URL).mock(
+                return_value=httpx.Response(200, json=payload),
+            )
+            with caplog.at_level("WARNING"):
+                await judge_tool_call(
+                    JudgeToolCallInputs(
+                        tool_name="post_message",
+                        tool_args={"text": "any harassment-flagged content"},
+                    )
+                )
+    assert any("redaction.no_pattern_for_rule" in r.message for r in caplog.records), [
+        r.message for r in caplog.records
+    ]

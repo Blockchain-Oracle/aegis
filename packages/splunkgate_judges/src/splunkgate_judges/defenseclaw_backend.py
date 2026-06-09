@@ -102,23 +102,21 @@ def _is_shell_tool(tool_name: str) -> bool:
 def _iter_strings(value: object) -> list[str]:
     """Walk a nested structure and return every string leaf.
 
-    Dicts + lists + tuples descend recursively. Other scalar types
+    Dicts + lists + tuples + sets descend recursively. Other scalar types
     (int, bool, float, None) are skipped because they can't carry a
-    regex-matchable dangerous substring. Sets are walked as iterables
-    too — defensive against agents that pass arbitrary JSON-encoded
-    structures (though set isn't strictly JSON-native).
+    regex-matchable dangerous substring.
 
-    Bounded recursion depth via explicit stack — protects against
-    pathological circular structures that an adversarial caller might
-    construct to DoS the matcher.
+    Cycle protection via `id()` set. NO iteration cap — caught by
+    code-reviewer + silent-failure-hunter on PR #118: a 1000-iteration
+    cap is a padding-attack surface (`{f'k{i}': benign for i in range(1001)}`
+    followed by SSN at index 1002 bypasses detection). The 64 KB
+    serialized-size cap in `judge_tool_call._validate_size` already
+    bounds total work; the cycle guard handles pathological structures.
     """
     out: list[str] = []
     stack: list[object] = [value]
     seen: set[int] = set()
-    max_depth = 1000  # explicit cap so a malicious nested struct can't hang us
-    iterations = 0
-    while stack and iterations < max_depth:
-        iterations += 1
+    while stack:
         item = stack.pop()
         item_id = id(item)
         if item_id in seen:

@@ -117,12 +117,40 @@ def _redact_string(text: str, rule: str) -> str:
     Rules without patterns (e.g. `Base64 Payload`, `Shell Injection`)
     pass through unchanged — those rules don't have a sensible
     substring substitution; their MODIFY path is best-effort.
+
+    **Silent-failure guard** (PR #118 silent-failure-hunter BLOCKING).
+    If `_REDACTION_PATTERNS` HAS patterns for the rule but none match,
+    OR if the rule is unknown to our pattern map (AI Defense returns
+    `HARASSMENT` / `HATE_SPEECH` / etc. — 8 of 11 AIDefenseRule values
+    have no v1 redactor), log WARN so the regex-coverage gap shows up
+    on Splunk dashboards instead of MODIFY tiles silently masking
+    unredacted content. Mirrors the fix applied to
+    `check_output_leak._redact` in PR #117.
     """
     token = f"[REDACTED:{rule}]"
     patterns = _REDACTION_PATTERNS.get(rule, [])
+    if not patterns:
+        _LOGGER.warning(
+            "redaction.no_pattern_for_rule",
+            extra={
+                "rule": rule,
+                "issue": "AI Defense fired rule but mcp-03 has no v1 redactor",
+                "resolution": "extend _REDACTION_PATTERNS for this rule",
+            },
+        )
+        return text
     redacted = text
     for pattern in patterns:
         redacted = pattern.sub(token, redacted)
+    if redacted == text:
+        _LOGGER.warning(
+            "redaction.miss",
+            extra={
+                "rule": rule,
+                "issue": "AI Defense fired but no client-side pattern matched",
+                "resolution": "widen _REDACTION_PATTERNS regexes for this rule",
+            },
+        )
     return redacted
 
 
