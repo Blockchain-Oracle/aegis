@@ -60,10 +60,8 @@ def _parse_tags(raw: str) -> tuple[str, ...]:
     return tuple(re.findall(r'"([^"]+)"', raw))
 
 
-@lru_cache(maxsize=1)
-def load_defenseclaw_rules(*, rules_path: Path | None = None) -> tuple[DefenseClawRule, ...]:
-    """Parse rules.go into a tuple of compiled DefenseClawRule entries (cached)."""
-    path = rules_path if rules_path is not None else DEFAULT_RULES_PATH
+def _load_uncached(path: Path) -> tuple[DefenseClawRule, ...]:
+    """Parse rules.go at `path` — no caching; used by the test-only path with a custom path."""
     if not path.exists():
         raise DefenseclawRulesMissingError(str(path))
 
@@ -92,3 +90,16 @@ def load_defenseclaw_rules(*, rules_path: Path | None = None) -> tuple[DefenseCl
             )
         )
     return tuple(rules)
+
+
+@lru_cache(maxsize=1)
+def _load_default_cached() -> tuple[DefenseClawRule, ...]:
+    """Module-singleton cache for the default rules.go path."""
+    return _load_uncached(DEFAULT_RULES_PATH)
+
+
+def load_defenseclaw_rules(*, rules_path: Path | None = None) -> tuple[DefenseClawRule, ...]:
+    """Return parsed DefenseClawRule entries; cached for the default path, uncached for explicit paths."""
+    if rules_path is None:
+        return _load_default_cached()
+    return _load_uncached(rules_path)

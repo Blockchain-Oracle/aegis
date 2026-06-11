@@ -19,16 +19,9 @@ from splunkgate_core.verdict import RuleHit, Severity, Verdict, VerdictLabel
 from splunkgate_judges.ai_defense import AIDefenseClient
 
 if TYPE_CHECKING:
-    from splunkgate_judges.ai_defense_mock import MockAIDefenseClient
-
     from splunkgate_eval.synthetic import EvalPrompt
 
 __all__ = ["ai_defense_alone"]
-
-
-def _client_from_env() -> AIDefenseClient | MockAIDefenseClient:
-    """Reuse the canonical from_env() dispatch — respects SPLUNKGATE_AI_DEFENSE_MOCK."""
-    return AIDefenseClient.from_env()
 
 
 def ai_defense_alone(prompt: EvalPrompt) -> Verdict:
@@ -39,7 +32,8 @@ def ai_defense_alone(prompt: EvalPrompt) -> Verdict:
         InspectRequest,
     )
 
-    client = _client_from_env()
+    # AIDefenseClient.from_env() honours SPLUNKGATE_AI_DEFENSE_MOCK (EPIC-04).
+    client = AIDefenseClient.from_env()
     started = time.perf_counter_ns()
     req = InspectRequest(
         messages=[InspectMessage(role="user", content=prompt.prompt)],

@@ -60,12 +60,10 @@ def test_allow_on_benign_prompt() -> None:
 def test_missing_rules_file_raises_with_remediation_string(tmp_path: Path) -> None:
     """The rule loader raises a typed error with the canonical remediation string."""
     missing = tmp_path / "no-rules.go"
-    load_defenseclaw_rules.cache_clear()
     with pytest.raises(DefenseclawRulesMissingError) as exc_info:
         load_defenseclaw_rules(rules_path=missing)
     assert "git submodule update --init inspiration/defenseclaw" in str(exc_info.value)
     assert exc_info.value.expected_path == str(missing)
-    load_defenseclaw_rules.cache_clear()
 
 
 def test_latency_is_recorded_as_positive_float() -> None:

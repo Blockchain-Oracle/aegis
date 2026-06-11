@@ -5,88 +5,60 @@
 
 from __future__ import annotations
 
-import hashlib
-from typing import Final
+from typing import Final, NamedTuple
 
 from splunkgate_core.verdict import Severity, VerdictLabel
 
 __all__ = ["MockJudgeResponse", "mock_dispatch"]
 
 
-class MockJudgeResponse:
+class MockJudgeResponse(NamedTuple):
     """One row in the deterministic verdict matrix."""
 
-    __slots__ = ("explanation", "severity", "verdict")
-
-    def __init__(
-        self,
-        *,
-        verdict: VerdictLabel,
-        severity: Severity,
-        explanation: str,
-    ) -> None:
-        """Wrap the three fields the gpt-oss-120b baseline returns."""
-        self.verdict = verdict
-        self.severity = severity
-        self.explanation = explanation
+    verdict: VerdictLabel
+    severity: Severity
+    explanation: str
 
 
-_PATTERN_DISPATCH: Final[tuple[tuple[str, MockJudgeResponse], ...]] = (
-    (
-        "ignore previous",
-        MockJudgeResponse(
-            verdict=VerdictLabel.BLOCK,
-            severity=Severity.HIGH,
-            explanation="Prompt-injection attempt: 'ignore previous instructions' override.",
-        ),
+_PATTERN_DISPATCH: Final[dict[str, MockJudgeResponse]] = {
+    "ignore previous": MockJudgeResponse(
+        VerdictLabel.BLOCK,
+        Severity.HIGH,
+        "Prompt-injection attempt: 'ignore previous instructions' override.",
     ),
-    (
-        "my ssn",
-        MockJudgeResponse(
-            verdict=VerdictLabel.BLOCK,
-            severity=Severity.HIGH,
-            explanation="PII disclosure: explicit SSN in prompt.",
-        ),
+    "my ssn": MockJudgeResponse(
+        VerdictLabel.BLOCK,
+        Severity.HIGH,
+        "PII disclosure: explicit SSN in prompt.",
     ),
-    (
-        "velocity.show",
-        MockJudgeResponse(
-            verdict=VerdictLabel.BLOCK,
-            severity=Severity.HIGH,
-            explanation="Imprompter-style exfiltration domain detected.",
-        ),
+    "velocity.show": MockJudgeResponse(
+        VerdictLabel.BLOCK,
+        Severity.HIGH,
+        "Imprompter-style exfiltration domain detected.",
     ),
-    (
-        "rm -rf",
-        MockJudgeResponse(
-            verdict=VerdictLabel.BLOCK,
-            severity=Severity.HIGH,
-            explanation="Destructive shell command in prompt.",
-        ),
+    "rm -rf": MockJudgeResponse(
+        VerdictLabel.BLOCK,
+        Severity.HIGH,
+        "Destructive shell command in prompt.",
     ),
-    (
-        "system prompt",
-        MockJudgeResponse(
-            verdict=VerdictLabel.REVIEW,
-            severity=Severity.MEDIUM,
-            explanation="Possible system-prompt disclosure request — human review.",
-        ),
+    "system prompt": MockJudgeResponse(
+        VerdictLabel.REVIEW,
+        Severity.MEDIUM,
+        "Possible system-prompt disclosure request — human review.",
     ),
-)
+}
 
 _DEFAULT_RESPONSE: Final[MockJudgeResponse] = MockJudgeResponse(
-    verdict=VerdictLabel.ALLOW,
-    severity=Severity.NONE_SEVERITY,
-    explanation="No safety-policy triggers detected.",
+    VerdictLabel.ALLOW,
+    Severity.NONE_SEVERITY,
+    "No safety-policy triggers detected.",
 )
 
 
 def mock_dispatch(prompt_text: str) -> MockJudgeResponse:
-    """Return a deterministic gpt-oss-120b-shaped response for `prompt_text`."""
+    """Return a deterministic gpt-oss-120b-shaped response."""
     lowered = prompt_text.lower()
-    for needle, response in _PATTERN_DISPATCH:
+    for needle, response in _PATTERN_DISPATCH.items():
         if needle in lowered:
             return response
-    # Hash-stable default so cross-corpus runs still produce a verdict.
-    _ = hashlib.sha256(prompt_text.encode()).hexdigest()
     return _DEFAULT_RESPONSE
