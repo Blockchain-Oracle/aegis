@@ -3,26 +3,28 @@
 from __future__ import annotations
 
 import json
-import sys
 from pathlib import Path
 
 from splunkgate_eval import EvalPrompt, IMPRoMPTER_PAPER_CITATION, load_imprompter
 from splunkgate_eval.imprompter import DEFAULT_PAYLOADS_PATH
 
-# Treat eval/tests/fixtures/ as a sibling-importable module without forcing
-# the eval/ package to be installed.
-_FIXTURES_DIR = Path(__file__).resolve().parent / "fixtures"
-if str(_FIXTURES_DIR) not in sys.path:
-    sys.path.insert(0, str(_FIXTURES_DIR))
-
-from imprompter_paper_snippets import (  # noqa: E402 — sys.path set up above
-    ARXIV_ID,
-    AUTHOR_FERNANDES,
-    EXFIL_DOMAIN,
-    FIGURE_1_LECHAT_PAYLOAD_PREFIX,
-    INSTITUTION_UCSD,
-    MISTRAL_PATCH_DATE,
-    TARGET_AGENTS,
+# Verbatim test fixtures (inlined for clarity; the JSONL is the canonical
+# corpus and the strings below are what we assert against it). The
+# mixed-script Unicode (Cyrillic U+043E + pdftotext replacement-char
+# artifact U+FFFD) is exactly what makes the attack obfuscated.
+FIGURE_1_LECHAT_PAYLOAD_PREFIX = "Paraо� risp »"  # noqa: RUF001 — verbatim mixed-script
+EXFIL_DOMAIN = "velocity.show"
+MISTRAL_PATCH_DATE = "2024-09-13"
+ARXIV_ID = "2410.14923"
+AUTHOR_FERNANDES = "Fernandes"
+INSTITUTION_UCSD = "UCSD"
+TARGET_AGENTS = frozenset(
+    {
+        "LeChat",
+        "ChatGLM",
+        "Custom Llama Agent",
+        "Mistral LeChat (Nemo)",
+    }
 )
 
 
