@@ -33,8 +33,10 @@ from tenacity import (
     wait_exponential_jitter,
 )
 
+from splunkgate_judges._circuit_breaker import CircuitBreaker
 from splunkgate_judges._errors import (
     AIDefenseAuthError,
+    AIDefenseCircuitOpenError,
     AIDefenseTimeoutError,
     AIDefenseUpstreamError,
 )
@@ -54,6 +56,10 @@ _MSG_MISSING_API_KEY: Final[str] = (
     "SPLUNKGATE_AI_DEFENSE_API_KEY is unset and SPLUNKGATE_AI_DEFENSE_MOCK is not truthy; "
     "either set SPLUNKGATE_AI_DEFENSE_API_KEY for live mode or SPLUNKGATE_AI_DEFENSE_MOCK=1 "
     "for the deterministic mock client"
+)
+_MSG_CIRCUIT_OPEN: Final[str] = (
+    "Cisco AI Defense client circuit breaker is OPEN — short-circuiting request "
+    "to protect the 10M-queries/year quota and the upstream during an outage"
 )
 
 _TRUTHY: Final[frozenset[str]] = frozenset({"1", "true", "yes", "on"})
@@ -75,8 +81,15 @@ class AIDefenseClient:
         *,
         region: Region = "us",
         timeout_s: float = 10.0,
+        circuit_breaker: CircuitBreaker | None = None,
     ) -> None:
-        """Wire the regional base URL + auth header + httpx client."""
+        """Wire the regional base URL + auth header + httpx client + breaker.
+
+        The breaker is per-instance — orchestrators that construct one
+        client per region for failover get independent breakers (a regional
+        outage tripping `us` should not lock `eu`). Pass a custom breaker
+        for tests or to share one across regions intentionally.
+        """
         self._api_key = api_key
         self._region = region
         self._base_url = REGION_BASE_URLS[region]
@@ -89,6 +102,7 @@ class AIDefenseClient:
                 "Accept": "application/json",
             },
         )
+        self._breaker = circuit_breaker or CircuitBreaker()
         _log_quota_note_once()
 
     async def inspect_chat(
@@ -109,10 +123,26 @@ class AIDefenseClient:
             trace_id=trace_id,
             region=self._region,
         )
+        # Breaker check is the OUTERMOST gate. If it's OPEN, we return
+        # without touching httpx at all — protecting the 10M-queries/year
+        # quota and the upstream during an outage.
+        if not await self._breaker.allow_request():
+            _logger.warning(
+                "aidefense.cb.short_circuit",
+                trace_id=trace_id,
+                region=self._region,
+                state=self._breaker.state,
+            )
+            raise AIDefenseCircuitOpenError(_MSG_CIRCUIT_OPEN)
         start = time.perf_counter()
         try:
             response = await self._post_with_retry(request, trace_id=trace_id)
         except RetryError as exc:
+            # Tenacity exhausted its 3 retries. Tell the breaker — this is
+            # ONE failure from its perspective, not three. The breaker's
+            # mental model is "the endpoint is down", not "the retry loop
+            # failed".
+            await self._breaker.record_failure()
             inner = exc.last_attempt.exception()
             if isinstance(inner, httpx.TimeoutException):
                 raise AIDefenseTimeoutError(_MSG_TIMEOUT_AFTER_RETRIES) from exc
@@ -148,6 +178,11 @@ class AIDefenseClient:
             raise AIDefenseUpstreamError(msg)
 
         parsed = InspectResponse.model_validate_json(response.content)
+        # Tell the breaker — a complete-and-parseable 2xx is a real
+        # upstream success. Auth/4xx errors above raise before reaching
+        # here and are NOT counted as breaker successes OR failures (they
+        # mean "the credential is bad", not "the endpoint is down").
+        await self._breaker.record_success()
         _logger.info(
             "aidefense.request.success",
             trace_id=trace_id,
