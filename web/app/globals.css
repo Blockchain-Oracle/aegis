@@ -1,0 +1,11 @@
+/* SplunkGate web — designer's CSS is the source of truth.
+   The four files below were authored by the designer; we import them
+   verbatim and do not modify selectors, tokens, or animations. */
+
+@import "../styles/designer/splunkgate-base.css";
+@import "../styles/designer/splunkgate-landing.css";
+@import "../styles/designer/splunkgate-docs.css";
+@import "../styles/designer/splunkgate-splunk-material.css";
+
+html { scroll-behavior: smooth; }
+html, body { margin: 0; padding: 0; }

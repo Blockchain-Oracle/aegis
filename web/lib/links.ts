@@ -1,0 +1,18 @@
+export const AG_LINKS = {
+  github: "https://github.com/Blockchain-Oracle/splunkgate",
+  nist: "https://www.nist.gov/itl/ai-risk-management-framework",
+  euact: "https://artificialintelligenceact.eu/",
+  euart6: "https://artificialintelligenceact.eu/article/6/",
+  eupen: "https://artificialintelligenceact.eu/article/99/",
+  sr262: "https://www.federalreserve.gov/supervisionreg/srletters/srletters.htm",
+  cisco: "https://www.cisco.com/site/us/en/products/security/ai-defense/index.html",
+  foundsec: "https://huggingface.co/fdtn-ai/Foundation-Sec-8B-Instruct",
+  otel: "https://opentelemetry.io/docs/specs/semconv/gen-ai/",
+  mcp: "https://modelcontextprotocol.io/",
+  splunk7404: "https://splunkbase.splunk.com/app/7404",
+  splunk7931: "https://splunkbase.splunk.com/app/7931",
+  mcpwatch: "https://splunkbase.splunk.com/app/8765",
+  dnsguard: "https://splunkbase.splunk.com/app/7922",
+  defenseclaw: "https://github.com/",
+  atlas: "https://atlas.mitre.org/techniques/AML.T0051",
+} as const;
