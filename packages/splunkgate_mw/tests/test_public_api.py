@@ -19,10 +19,8 @@ from splunkgate_mw import (
     SafetyToolMiddleware,
 )
 from splunkgate_mw.profiles import DEFAULT_PROFILE
-from splunklib.ai.messages import AgentResponse
 from splunklib.ai.middleware import (
     AgentMiddleware,
-    AgentRequest,
 )
 
 MIDDLEWARE_CLASSES = (
@@ -146,14 +144,7 @@ def test_middleware_kwargs_only() -> None:
 # tests/test_subagent_middleware.py.
 
 
-@pytest.mark.asyncio
-async def test_agent_middleware_stub_delegates_to_handler() -> None:
-    """Symmetry with the other three — no class left untested."""
-    instance = SafetyAgentMiddleware(profile="default")
-    sentinel = object()
-
-    async def handler(_request: AgentRequest) -> AgentResponse[object]:
-        return sentinel  # type: ignore[return-value]
-
-    result = await instance.agent_middleware(object(), handler)  # type: ignore[arg-type]
-    assert result is sentinel
+# test_agent_middleware_stub_delegates_to_handler removed: SafetyAgentMiddleware
+# is no longer a pass-through stub (replaced by the real trace_id seeding +
+# session summary in story-mw-06). Behavioral coverage lives in
+# tests/test_agent_middleware.py.

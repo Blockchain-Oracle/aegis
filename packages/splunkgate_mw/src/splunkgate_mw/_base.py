@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 import structlog
 from splunklib.ai.middleware import (
     AgentMiddleware,
-    AgentRequest,
     ModelRequest,
     ModelResponse,
 )
@@ -23,6 +22,7 @@ from splunklib.ai.middleware import (
 # Re-exported here to preserve the story-mw-01 import surface
 # `from splunkgate_mw._base import SafetyToolMiddleware`. The real
 # implementations now live in their own modules.
+from splunkgate_mw.agent_middleware import SafetyAgentMiddleware
 from splunkgate_mw.config import Config
 from splunkgate_mw.profiles import Profile
 from splunkgate_mw.subagent_middleware import SafetySubagentMiddleware
@@ -31,7 +31,6 @@ from splunkgate_mw.tool_middleware import SafetyToolMiddleware
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from splunklib.ai.messages import AgentResponse
 
 __all__ = [
     "SafetyAgentMiddleware",
@@ -86,17 +85,5 @@ class SafetyModelMiddleware(_SafetyMiddlewareBase):
         return await handler(request)
 
 
-class SafetyAgentMiddleware(_SafetyMiddlewareBase):
-    """SplunkGate safety wrap at the agent-request boundary.
-
-    Stub: delegates to `await handler(request)`. Real trace correlation +
-    request-level verdict emission lands in story-mw-06.
-    """
-
-    async def agent_middleware(
-        self,
-        request: AgentRequest,
-        handler: "Callable[[AgentRequest], Awaitable[AgentResponse[object]]]",
-    ) -> "AgentResponse[object]":
-        """Pass-through stub; real logic in story-mw-06."""
-        return await handler(request)
+# SafetyAgentMiddleware lives in `agent_middleware.py` (story-mw-06);
+# re-exported above to preserve the original import surface.

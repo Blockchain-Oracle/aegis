@@ -47,6 +47,7 @@ Surface = Literal[
     "mw_model",
     "mw_tool",
     "mw_subagent",
+    "mw_agent",
     "mcp_score",
     "mcp_judge_tool",
     "mcp_check_output",
