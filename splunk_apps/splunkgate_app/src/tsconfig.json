@@ -9,7 +9,6 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "../static/splunkgate-suit",
     "noEmit": true
   },
   "include": ["**/*.ts", "**/*.tsx"]

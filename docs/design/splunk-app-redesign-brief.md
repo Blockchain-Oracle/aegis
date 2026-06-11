@@ -41,10 +41,13 @@ The Brand-Kit-derived tokens port into `splunk_apps/splunkgate_app/src/styles/to
 ## Track-4 PR layout
 
 1. **PR 15 — `feat/suit-scaffold`** (this PR): scaffold + build
-   pipeline integration. Webpack bundle landing at
-   `splunk_apps/splunkgate_app/static/splunkgate-suit/main.js`,
-   committed so `_pack_tarball.py` survives cruft filtering. Temporary
-   `_suit_hello.xml` view confirms the wiring; removed in PR 18.
+   pipeline integration. Webpack entries for the three dashboards
+   pre-wired; the placeholder bundle `hello.js` is hand-written
+   vanilla JS so `_pack_tarball.py` needs no Node toolchain. The view
+   is hidden via the underscore prefix (`_suit_hello.xml`) — Splunk's
+   convention for non-navigable views — and locked to the app via
+   `[views/_suit_hello] export = none` in `default.meta`. Removed
+   outright in PR 18.
 2. **PR 16 — `feat/suit-evidence-pack`**: `RegulatorEvidencePack.tsx`
    + sub-components. SPL queries lifted verbatim from
    `ds_header_kpis`, `ds_nist_rmf_table`, `ds_eu_article_6_table`,
@@ -55,8 +58,11 @@ The Brand-Kit-derived tokens port into `splunk_apps/splunkgate_app/src/styles/to
    top-agents table, MSJ scaling line). Charts via
    `@splunk/react-visualizations`.
 4. **PR 18 — `feat/suit-verdict-inspector`**: `VerdictInspector.tsx`
-   + filter bar + table + detail panel. Removes the `_suit_hello.xml`
-   placeholder. Drops the placeholder from `default/data/ui/nav/default.xml`.
+   + filter bar + table + detail panel. Deletes the `_suit_hello.xml`
+   placeholder + its `[views/_suit_hello]` stanza in `default.meta`
+   + the deletion-obligation tripwires in `tests/test_suit_scaffold.py`.
+   (No `nav/default.xml` edit needed — the underscore-prefixed view
+   was never nav-registered.)
 
 ## SPL data layer
 

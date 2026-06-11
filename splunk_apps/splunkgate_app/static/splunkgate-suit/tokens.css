@@ -1,6 +1,8 @@
 /* Built equivalent of src/styles/tokens.css — committed so the tarball
  * doesn't need a Node toolchain at pack time. PR 18 swaps to webpack
- * `style-loader` extraction once all three dashboards build. */
+ * `style-loader` extraction once all three dashboards build. Tokens
+ * are byte-mirrored from the dev tree and from web/styles/designer/
+ * splunkgate-base.css (the Dossier source of truth). */
 
 .splunkgate-suit {
     --paper: #F1ECE1;
@@ -26,6 +28,23 @@
     font-family: 'Hanken Grotesk', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+}
+
+.splunkgate-suit.theme-dark {
+    --paper: #17140E;
+    --paper-2: #120F0A;
+    --card: #201C14;
+    --raised: #262118;
+    --rule: rgba(240, 234, 222, 0.13);
+    --rule-strong: rgba(240, 234, 222, 0.24);
+    --ink: #F0EADD;
+    --ink-2: #B4AC97;
+    --ink-3: #807969;
+    --accent: #E5786A;
+    --accent-deep: #E5786A;
+    --accent-soft: rgba(229, 120, 106, 0.14);
+    --blue: #5AA0F2;
+    --blue-ink: #8FC2FF;
 }
 
 .splunkgate-suit .mono {
@@ -68,4 +87,11 @@
     height: 1px;
     background: var(--rule);
     margin: 14px 0;
+}
+
+.splunkgate-suit a,
+.splunkgate-suit a:visited {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
 }

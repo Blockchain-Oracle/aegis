@@ -8,7 +8,6 @@
 
 import * as React from "react";
 import { createRoot } from "react-dom/client";
-import "../styles/tokens.css";
 
 function HelloView(): React.ReactElement {
     return (
@@ -24,7 +23,7 @@ function HelloView(): React.ReactElement {
                 </p>
                 <hr className="rule" />
                 <p className="mono" style={{ fontSize: 13, color: "var(--ink-2)" }}>
-                    bundle: /static/splunkgate-suit/hello.js · tokens: Dossier · runtime: SUIT
+                    bundle: /static/splunkgate-suit/hello.js | tokens: Dossier | runtime: SUIT
                 </p>
             </div>
         </div>
@@ -32,6 +31,14 @@ function HelloView(): React.ReactElement {
 }
 
 const root = document.getElementById("splunkgate-suit-hello");
-if (root) {
+if (!root) {
+    // Loud breadcrumb so a developer deep-linking to debug the bundle sees
+    // *why* nothing rendered. Silent no-op would mask XML/JS ID drift.
+    // eslint-disable-next-line no-console
+    console.warn(
+        "[splunkgate-suit] mount node #splunkgate-suit-hello not found; " +
+            "check _suit_hello.xml HTML module emitted the host div"
+    );
+} else {
     createRoot(root).render(<HelloView />);
 }

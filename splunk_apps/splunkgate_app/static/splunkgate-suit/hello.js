@@ -1,7 +1,7 @@
 /* SplunkGate SUIT scaffold placeholder bundle — vanilla JS.
  *
  * The full pipeline is documented in src/webpack.config.js; this file
- * is the hand-written equivalent of `pnpm build` for src/views/hello.tsx
+ * is the hand-written equivalent of `npm run build` for src/views/hello.tsx
  * so the .tgz packager doesn't need a Node toolchain. Once PR 16 lands
  * the first real dashboard, this bundle gets webpack-emitted alongside
  * the real chunks.
@@ -21,7 +21,7 @@
             'and removes this placeholder.</p>',
             '<hr class="rule" />',
             '<p class="mono" style="font-size:13px;color:var(--ink-2);">',
-            'bundle: /static/splunkgate-suit/hello.js · tokens: Dossier · runtime: SUIT',
+            'bundle: /static/splunkgate-suit/hello.js | tokens: Dossier | runtime: SUIT',
             '</p>',
             '</div>',
             '</div>'
@@ -29,13 +29,26 @@
         root.innerHTML = html;
     }
 
-    if (document.readyState === "loading") {
-        document.addEventListener("DOMContentLoaded", function () {
-            var root = document.getElementById("splunkgate-suit-hello");
-            if (root) render(root);
-        });
-    } else {
+    function mount() {
         var root = document.getElementById("splunkgate-suit-hello");
-        if (root) render(root);
+        if (!root) {
+            // Loud breadcrumb so a developer deep-linking the hidden view to
+            // debug the bundle sees *why* nothing rendered. Silent no-op would
+            // mask XML/JS ID drift across _suit_hello.xml + hello.js + hello.tsx.
+            if (typeof console !== "undefined" && console.warn) {
+                console.warn(
+                    "[splunkgate-suit] mount node #splunkgate-suit-hello not found; " +
+                    "check _suit_hello.xml HTML module emitted the host div"
+                );
+            }
+            return;
+        }
+        render(root);
+    }
+
+    if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", mount);
+    } else {
+        mount();
     }
 }());
