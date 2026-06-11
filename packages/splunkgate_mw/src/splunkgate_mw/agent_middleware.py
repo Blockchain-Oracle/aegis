@@ -22,8 +22,10 @@ What it does:
   one, we reuse it and skip the bind/unbind cycle. The summary verdict
   still emits.
 - (e) non-`SplunkGateError` exceptions (e.g. splunklib.ai's
-  `TimeoutExceededException`) propagate untouched; we only own
-  `SplunkGateError` outcomes.
+  `TimeoutExceededException`) propagate untouched, but we still emit an
+  ALLOW session summary so the SOC dashboard always carries a session-end
+  row. We only flip the summary to BLOCK when *SplunkGate itself* decided
+  to block; an upstream timeout is not our verdict to claim.
 
 Per `../../../context/02-agent-frameworks/06-splunklib-ai-deep-read.md`,
 splunklib.ai's `Agent` auto-generates a 32-hex-char trace_id at
@@ -123,16 +125,21 @@ class SafetyAgentMiddleware(AgentMiddleware):  # type: ignore[misc]
     ) -> AgentResponse[Any | None]:
         """Seed trace_id, bind contextvars, delegate, emit session summary in finally.
 
-        Every emitted verdict carries surface="mw_agent". On happy path
-        the summary is ALLOW; on SplunkGateError it is BLOCK. Non-
-        SplunkGateError exceptions propagate without emitting a summary.
+        Every emitted verdict carries surface="mw_agent". The summary is
+        ALLOW on happy path and on non-SplunkGateError failures (we don't
+        own those outcomes but we still record session-end). It flips to
+        BLOCK only when a SplunkGateError propagated through the chain.
         """
         # (d) honour a previously-bound trace_id — reuse it rather than
         # overwrite. The parent process (a unit-test fixture, an outer
         # Splunk modular input) may have set one already.
         existing = current_trace_id()
         i_bound_it = existing is None
-        trace_uuid = existing or _derive_trace_id(getattr(request, "thread_id", None))
+        # Direct attribute access — splunklib.ai.middleware.AgentRequest
+        # declares thread_id as a required field. If a future API rename
+        # drops it, this should crash loudly so we fix the upstream drift,
+        # not silently degrade to random uuid4 and lose session continuity.
+        trace_uuid = existing or _derive_trace_id(request.thread_id)
 
         token: Token[UUID | None] | None = bind_trace_id(trace_uuid) if i_bound_it else None
         structlog_token = structlog.contextvars.bind_contextvars(
@@ -142,9 +149,8 @@ class SafetyAgentMiddleware(AgentMiddleware):  # type: ignore[misc]
 
         now = datetime.now(UTC)
         started = time.perf_counter()
-        # Sentinel: was a SplunkGateError raised? Only those convert to BLOCK
-        # summary; other exceptions (TimeoutExceeded, etc.) propagate without
-        # a summary because we only own SplunkGateError outcomes.
+        # Sentinel: was a SplunkGateError raised? Only those convert to BLOCK;
+        # other exceptions still produce an ALLOW summary (session-end row).
         spg_error: SplunkGateError | None = None
         try:
             return await handler(request)
@@ -152,6 +158,29 @@ class SafetyAgentMiddleware(AgentMiddleware):  # type: ignore[misc]
             spg_error = exc
             raise
         finally:
+            self._emit_session_summary(
+                trace_uuid=trace_uuid,
+                now=now,
+                started=started,
+                spg_error=spg_error,
+            )
+            # Cleanup MUST run regardless — isolate each step so a
+            # structlog or contextvars failure can't strand the trace_id
+            # bound into the next session on this asyncio task.
+            self._reset_structlog(structlog_token, trace_uuid)
+            if i_bound_it and token is not None:
+                self._unbind_trace_id(token, trace_uuid)
+
+    def _emit_session_summary(
+        self,
+        *,
+        trace_uuid: UUID,
+        now: datetime,
+        started: float,
+        spg_error: SplunkGateError | None,
+    ) -> None:
+        """Build + emit the session-summary verdict; never raise out of finally."""
+        try:
             latency_ms = (time.perf_counter() - started) * 1000
             if spg_error is not None:
                 label = VerdictLabel.BLOCK
@@ -177,8 +206,33 @@ class SafetyAgentMiddleware(AgentMiddleware):  # type: ignore[misc]
                 label=label.value,
                 latency_ms=latency_ms,
             )
-            # Unbind contextvars only if we bound them — borrowed
-            # trace_ids stay bound for the outer scope.
-            structlog.contextvars.reset_contextvars(**structlog_token)
-            if i_bound_it and token is not None:
-                unbind_trace_id(token)
+        except Exception:  # noqa: BLE001 — observability failure must not eat the in-flight exception
+            _logger.warning(
+                "agent_middleware.summary_emit_failed",
+                trace_id=str(trace_uuid),
+                exc_info=True,
+            )
+
+    @staticmethod
+    def _reset_structlog(token: dict[str, object], trace_uuid: UUID) -> None:
+        """Reset structlog contextvars; swallow + log so cleanup chain continues."""
+        try:
+            structlog.contextvars.reset_contextvars(**token)
+        except Exception:  # noqa: BLE001 — cleanup chain must not strand the trace_id bind
+            _logger.warning(
+                "agent_middleware.structlog_reset_failed",
+                trace_id=str(trace_uuid),
+                exc_info=True,
+            )
+
+    @staticmethod
+    def _unbind_trace_id(token: Token[UUID | None], trace_uuid: UUID) -> None:
+        """Unbind the trace_id ContextVar; swallow + log so a stale-token bug surfaces in logs."""
+        try:
+            unbind_trace_id(token)
+        except Exception:  # noqa: BLE001 — last-step cleanup; surface in logs not exceptions
+            _logger.warning(
+                "agent_middleware.trace_id_unbind_failed",
+                trace_id=str(trace_uuid),
+                exc_info=True,
+            )
