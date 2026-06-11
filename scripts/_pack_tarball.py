@@ -66,6 +66,16 @@ DEV_CRUFT_PATTERNS = (
     ".mypy_cache/*",
     "*/.mypy_cache",
     "*/.mypy_cache/*",
+    # SUIT dev tree (story-suit-scaffold) — webpack/ts/react sources are
+    # the developer's build inputs; the built bundle lives in static/.
+    "src",
+    "src/*",
+    "*/src",
+    "*/src/*",
+    # AppInspect dotfiles that Splunkbase rejects (only .appinspect.expect.yaml
+    # is allowed — the others are dev-local).
+    ".appinspect.manualcheck.yaml",
+    ".appinspect.warnings.md",
 )
 
 

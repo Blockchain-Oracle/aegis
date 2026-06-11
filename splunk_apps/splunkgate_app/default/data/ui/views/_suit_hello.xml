@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<view template="dashboards/template.dashboard.html"
+      stylesheet="splunkgate-suit/tokens.css"
+      script="splunkgate-suit/hello.js"
+      isVisible="false">
+    <label>_SUIT scaffold check</label>
+    <description>Placeholder view confirming the SUIT bundle pipeline is wired. Hidden from the nav; removed in PR 18 (verdict-inspector) once all three real dashboards land.</description>
+    <module name="HTML">
+        <param name="html"><![CDATA[
+            <div id="splunkgate-suit-hello"></div>
+        ]]></param>
+    </module>
+</view>
