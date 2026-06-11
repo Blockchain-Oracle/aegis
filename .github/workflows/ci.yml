@@ -128,6 +128,25 @@ jobs:
           name: wheel-${{ matrix.package }}
           path: dist/
 
+  eval-smoke:
+    name: Eval smoke (fast subset)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test]
+    env:
+      SPLUNKGATE_AI_DEFENSE_MOCK: "true"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          version: ${{ env.UV_VERSION }}
+      - run: uv python install ${{ env.PYTHON_VERSION }}
+      - run: uv sync --all-packages --frozen
+      - name: Run eval-smoke (20 prompts, < 60s budget)
+        run: uv run python eval/scripts/eval_smoke.py
+      - name: Test eval-smoke contract
+        run: uv run pytest eval/tests/test_eval_smoke.py -v
+
   build-app:
     name: Build Splunk app .tgz
     runs-on: ubuntu-latest
