@@ -1,0 +1,104 @@
+/* splunkgate-tweaks.css — expressive tweak overrides. Driven by data-* on .ag.page.
+   material: archival | manila | blueprint   (paper stock + ink + signal)
+   voice:    editorial | technical           (headline personality)
+   density:  generous | compact              (rhythm) */
+
+/* ── MATERIAL · paper themes ── */
+.ag.theme-paper[data-material="manila"] {
+  --paper: #EADFC6; --paper-2: #E0D4B4; --card: #F4ECD6; --raised: #FBF6E8;
+  --ink: #2A2410; --ink-2: #5F5436; --ink-3: #978B66;
+  --rule: rgba(42,36,16,.16); --rule-strong: rgba(42,36,16,.32);
+  --accent: #A2371F; --accent-deep: #7C2513; --accent-soft: rgba(162,55,31,.10);
+}
+.ag.theme-paper[data-material="blueprint"] {
+  --paper: #E3E7EC; --paper-2: #D5DBE3; --card: #EFF2F6; --raised: #FFFFFF;
+  --ink: #15191F; --ink-2: #4A5360; --ink-3: #8893A1;
+  --rule: rgba(20,24,30,.13); --rule-strong: rgba(20,24,30,.28);
+  --accent: #1A6FE0; --accent-deep: #1257B8; --accent-soft: rgba(26,111,224,.10);
+}
+
+/* ── MATERIAL · accent carries into dark theme ── */
+.ag.theme-dark[data-material="manila"] {
+  --accent: #DB9A57; --accent-deep: #DB9A57; --accent-soft: rgba(219,154,87,.15);
+}
+.ag.theme-dark[data-material="blueprint"] {
+  --accent: #5AA0F2; --accent-deep: #8FC2FF; --accent-soft: rgba(90,160,242,.16);
+}
+
+/* ── VOICE · technical = grotesque headlines (quotes stay serif — they're documents) ── */
+.ag[data-voice="technical"] .ag-h1,
+.ag[data-voice="technical"] .sec-h2,
+.ag[data-voice="technical"] .tq-q,
+.ag[data-voice="technical"] .surf-desc h3,
+.ag[data-voice="technical"] .judge h3,
+.ag[data-voice="technical"] .beat h3,
+.ag[data-voice="technical"] .reg-card h3,
+.ag[data-voice="technical"] .start-card h3,
+.ag[data-voice="technical"] .dash-cap .dc-t,
+.ag[data-voice="technical"] .trust-item h4,
+.ag[data-voice="technical"] .bo-chip .bo-n {
+  font-family: 'Hanken Grotesk', system-ui, sans-serif; font-weight: 700; letter-spacing: -.025em;
+}
+.ag[data-voice="technical"] .ag-h1 { letter-spacing: -.035em; line-height: .99; }
+.ag[data-voice="technical"] .sec-h2 { letter-spacing: -.03em; line-height: 1.04; }
+.ag[data-voice="technical"] .tq-n { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 22px; }
+
+/* ── DENSITY · compact = denser rhythm + tighter scale ── */
+.ag[data-density="compact"] .sec { padding: 60px 0; }
+.ag[data-density="compact"] .hv-grid { padding: 48px 44px 62px; }
+.ag[data-density="compact"] .sec-head { margin-bottom: 36px; }
+.ag[data-density="compact"] .sec-lead { font-size: 16.5px; margin-top: 14px; }
+.ag[data-density="compact"] .ag-sub { font-size: 16.5px; }
+.ag[data-density="compact"] .sec-h2 { font-size: 36px; }
+.ag[data-density="compact"] .hero-page .ag-h1 { font-size: 54px; }
+.ag[data-density="compact"] .dash-wrap { margin-top: 32px; gap: 18px; }
+.ag[data-density="compact"] .verbatim { margin-top: 30px; padding: 28px 34px; }
+.ag[data-density="compact"] .tq { padding: 24px 22px; }
+.ag[data-density="compact"] .beat,
+.ag[data-density="compact"] .judge,
+.ag[data-density="compact"] .trust-item,
+.ag[data-density="compact"] .start-card { padding: 22px; }
+
+@media (max-width: 1024px){ .ag[data-density="compact"] .hero-page .ag-h1 { font-size: 46px; } }
+
+/* ════════════ SPLUNK-FAMILY MATERIAL (default) ════════════
+   Splunk's real gradient (orange→magenta, 94deg) + black→navy depth. voice=technical. */
+.ag[data-material="splunk"] {
+  --accent: #ED1E79; --accent-deep: #ED0080; --accent-soft: rgba(237,0,128,.13);
+  --sg-grad: linear-gradient(94deg, #F99D1C 0%, #F4781F 22%, #F05A22 39%, #EE1D62 76%, #ED0080 100%);
+}
+.ag.theme-dark[data-material="splunk"] {
+  --paper: #06070E; --paper-2: #0C0F1C; --card: #11141F; --raised: #161A28;
+  --rule: rgba(255,255,255,.10); --rule-strong: rgba(255,255,255,.20);
+  --ink: #F5F6F8; --ink-2: #A2A9B8; --ink-3: #686F80;
+}
+.ag.theme-dark[data-material="splunk"].page {
+  background: radial-gradient(120% 80% at 85% -5%, rgba(237,0,128,.10), transparent 55%),
+              linear-gradient(180deg, #06070E 0%, #0A0E22 55%, #06070E 100%);
+  background-attachment: fixed;
+}
+.ag.theme-dark[data-material="splunk"] .hero { background: transparent; }
+.ag.theme-paper[data-material="splunk"] {
+  --paper: #FFFFFF; --paper-2: #F3F5F7; --card: #FFFFFF; --raised: #FFFFFF;
+  --rule: rgba(16,18,23,.11); --rule-strong: rgba(16,18,23,.22);
+  --ink: #121319; --ink-2: #4A505B; --ink-3: #858B96;
+}
+/* gradient signal treatments */
+.ag[data-material="splunk"] .ag-accent { background: var(--sg-grad); -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent; font-style: normal; }
+.ag[data-material="splunk"] .ag-btn { background: var(--sg-grad); border-color: transparent; color: #fff; font-weight: 700; }
+.ag[data-material="splunk"] .ag-btn:hover { background: var(--sg-grad); filter: brightness(1.1); color: #fff; }
+.ag[data-material="splunk"] .ag-btn-ghost { background: transparent; color: var(--ink); border-color: var(--rule-strong); filter: none; }
+.ag[data-material="splunk"] .ag-btn-ghost:hover { color: var(--accent); border-color: var(--accent); }
+.ag[data-material="splunk"] .kicker::before,
+.ag[data-material="splunk"] .docs-eyebrow::before,
+.ag[data-material="splunk"] .tq-input::before { background: var(--sg-grad); }
+.ag[data-material="splunk"] .hero-kick .pip { background: #ED0080; box-shadow: 0 0 0 0 rgba(237,0,128,.5); }
+.ag[data-material="splunk"] .ag-wordmark { font-family: 'Hanken Grotesk', system-ui, sans-serif; font-weight: 700; letter-spacing: -.022em; }
+.ag[data-material="splunk"] .vstep-n, .ag[data-material="splunk"] .tq-n { color: var(--accent); }
+.ag[data-material="splunk"] .topnav, .ag[data-material="splunk"] .docs-top { border-top: 2px solid transparent; border-image: var(--sg-grad) 1; }
+/* docs headings go grotesque to match the landing's technical voice */
+.ag[data-material="splunk"] .docs-main h1,
+.ag[data-material="splunk"] .docs-sec > h2,
+.ag[data-material="splunk"] .docs-sec h3 { font-family: 'Hanken Grotesk', system-ui, sans-serif; font-weight: 700; letter-spacing: -.022em; }
+.ag[data-material="splunk"] .docs-side-group a.active { color: var(--accent); border-left-color: var(--accent); background: var(--accent-soft); }
