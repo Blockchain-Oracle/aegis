@@ -1,0 +1,33 @@
+# SplunkGate × DefenseClaw — drop-in config (story-dc-01).
+#
+# Pinned to DefenseClaw commit e1cb4d93fba70f5ffba8052ee6cfc696abdf125f
+# (v0.6.5, 2026-05-30). Field defaults match
+# internal/audit/sinks/splunk_hec.go lines 235-243 verbatim; the only
+# SplunkGate-specific overrides are `verify_tls: true` (fail-secure)
+# and the sourcetype / source_type_overrides routing.
+
+server:
+  listen: "0.0.0.0:8443"
+  upstream_default: "http://localhost:8080"
+
+rules:
+  pack: "regex"
+  config_path: "/etc/defenseclaw/rules.yaml"
+
+audit:
+  sinks:
+    - type: splunk_hec
+      endpoint: ${SPLUNKGATE_SPLUNK_HEC_URL}
+      token: ${SPLUNKGATE_SPLUNK_HEC_TOKEN}
+      index: ${SPLUNKGATE_SPLUNK_INDEX}
+      source: splunkgate
+      sourcetype: cisco_ai_defense:splunkgate_verdict
+      source_type_overrides:
+        guardrail-verdict: cisco_ai_defense:splunkgate_verdict
+        llm-judge-response: cisco_ai_defense:splunkgate_judge
+      batch_size: 50
+      flush_interval_s: 5
+      circuit_breaker_threshold: 5
+      circuit_breaker_cooldown_s: 60
+      max_retries: 3
+      verify_tls: true
