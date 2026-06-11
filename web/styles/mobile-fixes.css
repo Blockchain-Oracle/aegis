@@ -11,6 +11,20 @@
    never edit the files under `styles/designer/`. */
 
 
+/* ─── 0 · Restore position: sticky for the docs sidebar ────────────────────
+   The designer set `.docs-side { position: sticky; top: 53px }` but the
+   sidebar scrolled away with the page content. Root cause: the designer's
+   `.ag.page { overflow-x: hidden }` creates a sticky containing block —
+   the browser anchors `.docs-side`'s sticky behaviour to `.ag.page`, but
+   `<html>` is the actual scroller, so the sticky never triggers and the
+   sidebar tracks the page scroll exactly like a static element.
+
+   `overflow-x: clip` does the same horizontal clipping without creating
+   a containing block for sticky descendants (CSS Overflow Module Level 3,
+   widely supported since 2022 — Chrome 90 / Firefox 81 / Safari 16). */
+.ag.page { overflow-x: clip; }
+
+
 /* ─── 1 · Section + wrap padding (phones lose horizontal breathing room) ─ */
 @media (max-width: 720px) {
   .sec { padding: 64px 0; }
