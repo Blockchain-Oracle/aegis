@@ -66,6 +66,35 @@ DEV_CRUFT_PATTERNS = (
     ".mypy_cache/*",
     "*/.mypy_cache",
     "*/.mypy_cache/*",
+    # SUIT dev tree (story-suit-scaffold) — webpack/ts/react sources are
+    # the developer's build inputs; the built bundle lives in static/.
+    "src",
+    "src/*",
+    "*/src",
+    "*/src/*",
+    # AppInspect dotfiles that Splunkbase rejects (only .appinspect.expect.yaml
+    # is allowed — the others are dev-local).
+    ".appinspect.manualcheck.yaml",
+    ".appinspect.warnings.md",
+    # Node / SUIT build artefacts. node_modules can balloon to ~80 MB and
+    # AppInspect flags it under `check_for_third_party_libraries_in_app`.
+    # Lockfiles + sourcemaps + the TS incremental-build cache are dev-local.
+    "node_modules",
+    "node_modules/*",
+    "*/node_modules",
+    "*/node_modules/*",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "*/package-lock.json",
+    "*/pnpm-lock.yaml",
+    "*/yarn.lock",
+    "*.tsbuildinfo",
+    "*/*.tsbuildinfo",
+    "*.map",
+    "*/*.map",
+    ".eslintcache",
+    "*/.eslintcache",
 )
 
 
@@ -124,7 +153,16 @@ def build_tarball(source: Path, top_level: str, output: Path) -> None:
             arcname = f"{top_level}/{rel}"
             info = tar.gettarinfo(str(path), arcname=arcname)
             if info is None:
-                continue
+                # gettarinfo returns None for unsupported file types (broken
+                # symlinks, sockets, FIFOs, char devices). Silent skip would
+                # violate the deterministic-build contract — one machine could
+                # ship a partial artifact while another shipped a complete one.
+                msg = (
+                    f"tarfile.gettarinfo returned None for {path!r} — "
+                    "unsupported file type (broken symlink, socket, device?). "
+                    "Refusing to build a non-deterministic artifact."
+                )
+                raise RuntimeError(msg)
             _normalize(info)
             if info.isfile():
                 with path.open("rb") as fh:

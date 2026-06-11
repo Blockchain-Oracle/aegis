@@ -1,0 +1,106 @@
+/* SplunkGate "Dossier" design tokens — ported verbatim from
+   web/styles/designer/splunkgate-base.css. Splunk views reference
+   these via the static bundle's stylesheet; the SUIT components
+   consume CSS custom properties exclusively (no inline colour
+   literals) so theme switching is a one-class change. */
+
+.splunkgate-suit {
+    --paper: #F1ECE1;
+    --paper-2: #E7E0D1;
+    --card: #FBF8F1;
+    --raised: #FFFFFF;
+    --rule: rgba(28, 25, 18, 0.14);
+    --rule-strong: rgba(28, 25, 18, 0.30);
+    --ink: #1D1A13;
+    --ink-2: #5A5447;
+    --ink-3: #938C7B;
+    --accent: #BC3A26;
+    --accent-deep: #93291A;
+    --accent-soft: rgba(188, 58, 38, 0.09);
+    --blue: #1A6FE0;
+    --blue-ink: #15539E;
+    --block: #E66A60;
+    --med: #E2A53E;
+    --allow: #5FB98C;
+    --radius: 3px;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+.splunkgate-suit.theme-dark {
+    --paper: #17140E;
+    --paper-2: #120F0A;
+    --card: #201C14;
+    --raised: #262118;
+    --rule: rgba(240, 234, 222, 0.13);
+    --rule-strong: rgba(240, 234, 222, 0.24);
+    --ink: #F0EADD;
+    --ink-2: #B4AC97;
+    --ink-3: #807969;
+    --accent: #E5786A;
+    --accent-deep: #E5786A;
+    --accent-soft: rgba(229, 120, 106, 0.14);
+    --blue: #5AA0F2;
+    --blue-ink: #8FC2FF;
+}
+
+.splunkgate-suit .mono {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+}
+
+.splunkgate-suit .serif {
+    font-family: 'Newsreader', Georgia, serif;
+}
+
+.splunkgate-suit .accent {
+    color: var(--accent);
+    font-style: italic;
+}
+
+.splunkgate-suit h1,
+.splunkgate-suit h2,
+.splunkgate-suit h3 {
+    font-family: 'Newsreader', Georgia, serif;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+    color: var(--ink);
+    margin: 0 0 16px 0;
+}
+
+.splunkgate-suit h1 {
+    font-size: 32px;
+}
+
+.splunkgate-suit h2 {
+    font-size: 22px;
+}
+
+.splunkgate-suit h3 {
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.splunkgate-suit .card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: var(--radius);
+    padding: 20px 24px;
+    margin-bottom: 14px;
+}
+
+.splunkgate-suit .rule {
+    border: 0;
+    height: 1px;
+    background: var(--rule);
+    margin: 14px 0;
+}
+
+.splunkgate-suit a,
+.splunkgate-suit a:visited {
+    color: var(--accent);
+    text-decoration: none;
+    border-bottom: 1px solid currentColor;
+}
