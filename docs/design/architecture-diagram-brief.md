@@ -1,6 +1,13 @@
 # Architecture Diagram — Designer Brief
 
-**Output:** SVG at `docs/assets/architecture.svg` (export PNG at `docs/assets/architecture.png`)
+**Output:** SVG source file at `docs/assets/architecture.svg`; export PNG at repo root as
+`architecture_diagram.png` (1180 × 720 px) for GitHub README embedding and Devpost submission.
+
+> Note: story-readme-02 originally specified a Mermaid CLI + CI workflow approach. The correct
+> approach (confirmed with the project owner) is a designer-rendered SVG from the Brand Kit's
+> existing `id="art-arch"` HTML element — not programmatic generation. The PNG lands at repo root
+> to satisfy the Devpost screenshot requirement.
+
 **Canvas:** 1180 × 720 px, background `#F1ECE1` (--paper from Brand Kit)
 **Title:** "How a verdict travels"
 **Subtitle:** `agent → judgment → verdict → OpenTelemetry → Splunk`
@@ -48,7 +55,7 @@ Three inner rows:
 | row | left accent | primary label | secondary label |
 |-----|-------------|--------------|-----------------|
 | Classifier | `#BC3A26` (--accent, 2px left border) | `Cisco AI Defense` | `binary classifier · 11 rules` |
-| Explainer  | `#E2A53E` (amber, 2px left border)    | `Foundation-Sec`   | `explainer · WHY-string` |
+| Explainer  | `#E2A53E` (amber, 2px left border — from Brand Kit HTML `.acore-row.exp` CSS rule) | `Foundation-Sec` | `explainer · WHY-string` |
 | Verdict    | full `#BC3A26` fill (--accent)        | `Verdict`          | right-aligned: `BLOCK · HIGH` |
 
 Verdict row: white text on accent red, spans full width of dark card. Monospaced.
