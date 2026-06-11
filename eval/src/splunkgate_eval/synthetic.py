@@ -1,14 +1,4 @@
-"""Synthetic corpus loaders (story-eval-01).
-
-Reads the three JSONL files produced by `Synthetic-Data/generate_agent_verdicts.py`
-into Pydantic-validated `EvalPrompt` records. The loader does not generate
-data — `generate_agent_verdicts.py` is the source of truth — so this file
-is safe for §14 production-source greps.
-
-`EvalPrompt` is the shared eval-harness record shape used by every loader
-(synthetic, JailbreakBench, AdvBench, Imprompter). Future loaders import
-it from `splunkgate_eval` and produce the same shape.
-"""
+"""Synthetic corpus loaders. Reads JSONL files emitted by Synthetic-Data/generate_agent_verdicts.py."""
 
 from __future__ import annotations
 
@@ -30,9 +20,6 @@ PromptCategory = Literal[
     "tool_call_abuse",
     "multi_turn_injection",
     "benign_control",
-    "jailbreakbench",
-    "advbench",
-    "imprompter",
 ]
 VerdictLabel = Literal["ALLOW", "BLOCK", "MODIFY", "REVIEW"]
 SeverityLabel = Literal["NONE_SEVERITY", "LOW", "MEDIUM", "HIGH"]
@@ -53,8 +40,8 @@ class EvalPrompt(BaseModel):
     @field_validator("id")
     @classmethod
     def _id_is_uuid_string(cls, value: str) -> str:
-        """The synthetic generator emits UUIDv5; bench loaders also normalise to UUID strings."""
-        UUID(value)  # raises on malformed
+        """All loaders normalise IDs to UUID strings — bench corpora hash their native IDs into UUIDs at load."""
+        UUID(value)
         return value
 
 

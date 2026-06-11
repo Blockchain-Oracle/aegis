@@ -31,6 +31,11 @@ Every line of every JSONL is one JSON object validating against
 }
 ```
 
+> **Do not hand-edit the JSONL files.** They are deterministic
+> regenerations of `generate_agent_verdicts.py` — every PR or test that
+> depends on a specific record must update the generator, not the
+> JSONL output.
+
 ## How to regenerate
 
 ```bash

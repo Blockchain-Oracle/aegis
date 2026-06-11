@@ -104,28 +104,6 @@ def test_benign_records_all_have_allow_verdict() -> None:
         assert rec["expected_verdict"] == "ALLOW"
 
 
-def test_expected_verdict_in_canonical_set() -> None:
-    """No JSONL record carries a verdict outside the 4-name canonical set."""
-    allowed = {"ALLOW", "BLOCK", "MODIFY", "REVIEW"}
-    for path in _FILES.values():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            rec = json.loads(line)
-            assert rec["expected_verdict"] in allowed
-
-
-def test_expected_severity_in_canonical_set() -> None:
-    """No JSONL record carries a severity outside the 4-name canonical set."""
-    allowed = {"NONE_SEVERITY", "LOW", "MEDIUM", "HIGH"}
-    for path in _FILES.values():
-        for line in path.read_text(encoding="utf-8").splitlines():
-            if not line.strip():
-                continue
-            rec = json.loads(line)
-            assert rec["expected_severity"] in allowed
-
-
 def test_source_citation_is_non_empty_on_every_record() -> None:
     """source_citation is load-bearing for provenance audit — empty is a smell."""
     for path in _FILES.values():
