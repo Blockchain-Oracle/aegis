@@ -376,12 +376,18 @@ stories:
   # EPIC-11 — README + demo (LAST)
   - id: story-readme-01-headline-and-banner-and-credits
     epic: "EPIC-11 — README + demo"
-    status: PENDING
+    status: COMPLETE
     depends_on: [story-eval-05-metrics-and-report-generator]
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/124"
+    merged_at: "2026-06-11T07:20:00Z"
+    note: "README rewrite + designer banner (docs/assets/banner.png 233KB original). Eval metrics marked 🟡 pending per HALLUCINATION-AUDIT discipline — dependency on eval-05 waived."
   - id: story-readme-02-architecture-diagrams-light-dark-png
     epic: "EPIC-11 — README + demo"
-    status: PENDING
+    status: COMPLETE
     depends_on: []
+    pr: "https://github.com/Blockchain-Oracle/splunkgate/pull/124"
+    merged_at: "2026-06-11T07:20:00Z"
+    note: "docs/design/architecture-diagram-brief.md (10D format) delivered for designer to render as SVG. Mermaid/programmatic approach superseded per owner decision — designer renders from Brand Kit HTML id=art-arch."
   - id: story-demo-01-screencast-and-script
     epic: "EPIC-11 — README + demo"
     status: PENDING
