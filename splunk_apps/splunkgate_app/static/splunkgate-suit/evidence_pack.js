@@ -2,25 +2,32 @@
  *
  * Custom view bundle that replaces the Dashboard Studio v2 JSON-driven view.
  * Mounts to #splunkgate-evidence-pack and renders the Dossier-styled examiner
- * artifact: header + jurisdictional dropdown + coverage period + Export PDF
- * action + 4-tile KPI strip + NIST RMF mapping + verbatim SR 26-2 footnote 3
- * quote + EU AI Act Article 6 table + conditional HIPAA/PCI panels + footer.
+ * artifact: header + jurisdictional banner + Export PDF action (gated on
+ * search completion) + 4-tile KPI strip + NIST RMF mapping + verbatim SR
+ * 26-2 footnote 3 quote + EU AI Act Article 6 table + profile-conditional
+ * HIPAA/PCI panels (hidden from print when gated) + footer with panel-status
+ * line.
  *
  * SPL data sources are lifted verbatim from the archived Dashboard Studio v2
  * definition at docs/archive/dashboard-studio-v2/regulator_evidence_pack.xml.
  *
- * State: managed locally (jurisdictionalTag + earliest/latest). Searches
- * re-run whenever state changes. Splunk Search SDK runtime is provided by
- * Splunk Web's RequireJS context.
+ * Search-lifecycle contract (matches TSX source-of-truth at
+ * src/views/evidence_pack.tsx) — every search has a `cancelled` closure
+ * flag; state changes cancel in-flight searches; AMD load failures + new
+ * SearchManager() throws + 30s hangs all surface as setError(); Export PDF
+ * is disabled while any search is in flight or any panel is in error.
  */
 (function () {
     "use strict";
 
     var MOUNT_ID = "splunkgate-evidence-pack";
+    var SEARCH_TIMEOUT_MS = 30000;
+    var SEARCH_ID_SEQ = 0;
 
     /* SPL queries — verbatim from the archived Dashboard Studio v2 spec.
-     * The $input_jurisdictional_tag$ token is substituted client-side at
-     * search-launch time. */
+     * The $input_jurisdictional_tag$ token is dropped (we gate HIPAA/PCI
+     * client-side now), so the queries are simpler than the archive's;
+     * the substantive SPL is unchanged. */
     var QUERIES = {
         header_kpis: '`splunkgate_data` | stats count as total_decisions, dc(trace_id) as unique_traces, count(eval(explanation!="")) as attested_decisions',
         nist_rmf: '| makeresults count=4 | eval _time=now() | streamstats count as row | eval function = case(row=1,"GOVERN", row=2,"MAP", row=3,"MEASURE", row=4,"MANAGE"), splunkgate_components = case(row=1,"S1 middleware policy enforcement; S4 dashboards expose accountability roles", row=2,"S2 MCP server enumerates agent boundaries; splunkgate_verdict_history KV-store maps decision context", row=3,"S4 eval harness produces precision/recall/F1/ECE; OTel gen_ai.evaluation.result events emit per-decision scores", row=4,"S1 model_middleware blocks/redacts; story-mw-08 audit chain threads pre+post trace_ids; story-app-08 RBA closes the loop in ES"), evidence_query = case(row=1,"`splunkgate_data` surface=mw_model | stats count", row=2,"`splunkgate_data` | stats dc(agent_id) as agents dc(surface) as surfaces", row=3,"index=cisco_ai_defense sourcetype=cisco_ai_defense:splunkgate_verdict | stats count", row=4,"`splunkgate_data` verdict_label=block | stats count by agent_id") | table function splunkgate_components evidence_query',
@@ -33,7 +40,10 @@
     /* The SR 26-2 footnote 3 quote — verbatim from the joint Federal Reserve
      * / OCC / FDIC SR 26-2 Attachment, p. 3, April 17, 2026. DO NOT
      * paraphrase, summarize, or abridge — this is the load-bearing trust
-     * signal of the entire artifact. */
+     * signal of the entire artifact. escapeHtml() is applied at render time
+     * as defense-in-depth; the constant itself is trusted. Wire form of the
+     * apostrophe will be &#39; (HTML entity); the rendered DOM displays it
+     * as a normal ASCII apostrophe. */
     var SR_26_2_QUOTE =
         "Generative AI and agentic AI models are novel and rapidly evolving. " +
         "As such, they are not within the scope of this guidance. Nonetheless, " +
@@ -68,7 +78,15 @@
         jurisdictionalTag: "ALL",
         earliest: "-30d@d",
         latest: "now",
-        searches: {}
+        searches: {},
+        panelStatus: {
+            header_kpis: "idle",
+            nist_rmf: "idle",
+            eu_article_6: "idle",
+            hipaa: "idle",
+            pci: "idle",
+            footer: "idle"
+        }
     };
 
     function escapeHtml(s) {
@@ -88,14 +106,27 @@
         return preset ? preset.label : earliest + " → now";
     }
 
+    function profileLabel(tag) {
+        var p = JURISDICTIONAL_PROFILES.filter(function (x) { return x.value === tag; })[0];
+        return p ? p.label : tag;
+    }
+
+    function isHipaaActive() {
+        return state.jurisdictionalTag === "HIPAA" || state.jurisdictionalTag === "ALL";
+    }
+
+    function isPciActive() {
+        return state.jurisdictionalTag === "PCI" || state.jurisdictionalTag === "ALL";
+    }
+
     function renderShell(root) {
         var optsJur = JURISDICTIONAL_PROFILES.map(function (p) {
             var sel = p.value === state.jurisdictionalTag ? " selected" : "";
-            return '<option value="' + p.value + '"' + sel + ">" + escapeHtml(p.label) + "</option>";
+            return '<option value="' + escapeHtml(p.value) + '"' + sel + ">" + escapeHtml(p.label) + "</option>";
         }).join("");
         var optsTime = TIME_PRESETS.map(function (p) {
             var sel = p.value === state.earliest ? " selected" : "";
-            return '<option value="' + p.value + '"' + sel + ">" + escapeHtml(p.label) + "</option>";
+            return '<option value="' + escapeHtml(p.value) + '"' + sel + ">" + escapeHtml(p.label) + "</option>";
         }).join("");
 
         root.innerHTML = [
@@ -111,9 +142,10 @@
             '<select id="ep-jur">' + optsJur + '</select></div>',
             '<div class="ep-control"><label for="ep-time">Coverage period</label>',
             '<select id="ep-time">' + optsTime + '</select></div>',
-            '<button type="button" class="ep-export-btn" id="ep-export">Export PDF for examiner record</button>',
+            '<button type="button" class="ep-export-btn" id="ep-export" disabled>Export PDF for examiner record</button>',
             '</div>',
             '</header>',
+            '<div class="ep-jurisdiction-banner" id="ep-jurisdiction-banner"></div>',
             '<section class="ep-kpis" id="ep-kpis-section"></section>',
             '<section class="ep-grid">',
             '<div class="ep-panel" id="ep-nist-panel">',
@@ -133,19 +165,20 @@
             '<p class="ep-panel-desc">Article 6 high-risk classification triggers (Article 6(1) product-safety integration + Article 6(2) Annex III enumeration). High-risk Annex III obligations under Article 6(2) apply from 2 August 2026. SplunkGate decisions can satisfy Article 9 (risk management) evidence obligations.</p>',
             '<div class="ep-panel-body" id="ep-eu-body"></div>',
             '</div>',
-            '<div class="ep-panel" id="ep-hipaa-panel">',
+            '<div class="ep-panel ep-gated" id="ep-hipaa-panel">',
             '<h2>HIPAA Safe Harbor 18 — PHI detection counts</h2>',
-            '<p class="ep-panel-desc">Conditional on Jurisdictional profile being HIPAA or ALL. An empty table means EITHER no PHI verdicts in the window OR the current profile gate excluded this panel.</p>',
+            '<p class="ep-panel-desc">PHI detection counts grouped by surface and agent for the coverage window.</p>',
             '<div class="ep-panel-body" id="ep-hipaa-body"></div>',
             '</div>',
-            '<div class="ep-panel" id="ep-pci-panel">',
+            '<div class="ep-panel ep-gated" id="ep-pci-panel">',
             '<h2>PCI DSS 11.x — PCI detection counts</h2>',
-            '<p class="ep-panel-desc">Conditional on Jurisdictional profile being PCI or ALL. Supports PCI-DSS 4.0 11.x sub-requirements via the persisted KV-store retention of PCI-tagged trace_ids.</p>',
+            '<p class="ep-panel-desc">PCI detection counts grouped by surface, agent, and severity. Supports PCI-DSS 4.0 11.x sub-requirements via the persisted KV-store retention of PCI-tagged trace_ids.</p>',
             '<div class="ep-panel-body" id="ep-pci-body"></div>',
             '</div>',
             '<footer class="ep-footer" id="ep-footer">',
             '<span>SplunkGate v1.0.0</span>',
             '<span id="ep-footer-coverage">' + escapeHtml(formatLabel(state.earliest)) + '</span>',
+            '<span id="ep-footer-status"></span>',
             '<span id="ep-footer-generated"></span>',
             '</footer>',
             '</div>',
@@ -153,23 +186,106 @@
         ].join("");
     }
 
-    function setLoading(elId) {
+    function setLoading(elId, panelKey) {
         var el = document.getElementById(elId);
         if (el) { el.innerHTML = '<div class="ep-state">Loading…</div>'; }
+        if (panelKey) { state.panelStatus[panelKey] = "loading"; updateExportGate(); }
     }
 
-    function setError(elId, errMsg) {
+    function setError(elId, errMsg, panelKey) {
         var el = document.getElementById(elId);
         if (el) {
-            el.innerHTML = '<div class="ep-state ep-error">Search error: ' + escapeHtml(errMsg) + '</div>';
+            // Hard-edged error treatment so it survives black-and-white print:
+            // red top border (handled in CSS via .ep-state-error wrapper),
+            // bold "PANEL FAILED TO LOAD" header, monospace error body.
+            el.innerHTML = (
+                '<div class="ep-state-error-wrap">' +
+                '<div class="ep-state-error-head">PANEL FAILED TO LOAD</div>' +
+                '<div class="ep-state-error-msg">' + escapeHtml(errMsg) + '</div>' +
+                '</div>'
+            );
+        }
+        if (panelKey) { state.panelStatus[panelKey] = "error"; updateExportGate(); }
+    }
+
+    function setEmpty(elId, msg, panelKey) {
+        var el = document.getElementById(elId);
+        if (el) { el.innerHTML = '<div class="ep-state ep-state-empty">' + escapeHtml(msg) + '</div>'; }
+        if (panelKey) { state.panelStatus[panelKey] = "ok"; updateExportGate(); }
+    }
+
+    function setOk(panelKey) {
+        if (panelKey) { state.panelStatus[panelKey] = "ok"; updateExportGate(); }
+    }
+
+    function updateExportGate() {
+        var btn = document.getElementById("ep-export");
+        var status = document.getElementById("ep-footer-status");
+        if (!btn || !status) { return; }
+        var loading = 0;
+        var errored = 0;
+        var ok = 0;
+        // Only count panels that are actually visible under the current profile.
+        var keys = ["header_kpis", "nist_rmf", "eu_article_6", "footer"];
+        if (isHipaaActive()) { keys.push("hipaa"); }
+        if (isPciActive()) { keys.push("pci"); }
+        keys.forEach(function (k) {
+            var s = state.panelStatus[k];
+            if (s === "loading" || s === "idle") { loading += 1; }
+            else if (s === "error") { errored += 1; }
+            else if (s === "ok") { ok += 1; }
+        });
+        var allOk = (loading === 0 && errored === 0 && keys.length > 0);
+        btn.disabled = !allOk;
+        if (loading > 0) {
+            btn.textContent = "Waiting for " + loading + " panel" + (loading === 1 ? "" : "s") + "…";
+            status.textContent = "Panel status: " + ok + " OK / " + errored + " errored / " + loading + " loading";
+        } else if (errored > 0) {
+            btn.textContent = errored + " panel" + (errored === 1 ? "" : "s") + " failed — fix before export";
+            status.textContent = "Panel status: " + ok + " OK / " + errored + " errored";
+        } else {
+            btn.textContent = "Export PDF for examiner record";
+            status.textContent = "Panel status: " + ok + " OK";
         }
     }
 
-    function setEmpty(elId, msg) {
-        var el = document.getElementById(elId);
-        if (el) { el.innerHTML = '<div class="ep-state">' + escapeHtml(msg) + '</div>'; }
+    function renderJurisdictionBanner() {
+        var el = document.getElementById("ep-jurisdiction-banner");
+        if (!el) { return; }
+        var label = profileLabel(state.jurisdictionalTag);
+        // Examiner-readable scope statement. Never reference UI affordances
+        // here — the user will see this in the PDF.
+        var scope = "";
+        if (state.jurisdictionalTag === "ALL") {
+            scope = "All in-scope profiles are included in this artifact (FSI / HIPAA / PCI / PUBSEC). Both the HIPAA Safe Harbor 18 and PCI DSS 11.x panels are populated below.";
+        } else if (state.jurisdictionalTag === "HIPAA") {
+            scope = "Scope: HIPAA Safe Harbor 18. The HIPAA panel below is populated; the PCI panel is excluded from this profile and is omitted from the artifact.";
+        } else if (state.jurisdictionalTag === "PCI") {
+            scope = "Scope: PCI DSS 11.x. The PCI panel below is populated; the HIPAA panel is excluded from this profile and is omitted from the artifact.";
+        } else if (state.jurisdictionalTag === "FSI") {
+            scope = "Scope: FSI (FFIEC-AIML / SR 26-2). Neither HIPAA nor PCI panels are in scope for this profile; both are omitted from the artifact.";
+        } else if (state.jurisdictionalTag === "PUBSEC") {
+            scope = "Scope: PUBSEC (NIST AI RMF). Neither HIPAA nor PCI panels are in scope for this profile; both are omitted from the artifact.";
+        }
+        el.innerHTML = (
+            '<div class="ep-banner-label">Coverage profile</div>' +
+            '<div class="ep-banner-value">' + escapeHtml(label) + '</div>' +
+            '<div class="ep-banner-scope">' + escapeHtml(scope) + '</div>'
+        );
     }
 
+    function applyProfileVisibility() {
+        var hipaa = document.getElementById("ep-hipaa-panel");
+        var pci = document.getElementById("ep-pci-panel");
+        if (hipaa) {
+            hipaa.classList.toggle("ep-hidden", !isHipaaActive());
+        }
+        if (pci) {
+            pci.classList.toggle("ep-hidden", !isPciActive());
+        }
+    }
+
+    /* Kpi helpers — escape inside the helper so callers can't forget. */
     function renderHeaderKpis(rows) {
         var section = document.getElementById("ep-kpis-section");
         if (!section) { return; }
@@ -184,56 +300,59 @@
             pct = Math.round((attestedNum / totalNum) * 100) + "%";
         }
         section.innerHTML = [
-            kpi("Coverage period", escapeHtml(formatLabel(state.earliest)), "earliest → now"),
-            kpi("Total decisions", escapeHtml(total), "verdicts in window"),
-            kpi("Unique trace IDs", escapeHtml(traces), "agent sessions"),
-            kpi("Attested decisions", escapeHtml(attested), pct + " with explanation")
+            kpi("Coverage period", formatLabel(state.earliest), "earliest → now"),
+            kpi("Total decisions", total, "verdicts in window"),
+            kpi("Unique trace IDs", traces, "agent sessions"),
+            kpi("Attested decisions", attested, pct + " with explanation")
         ].join("");
+        setOk("header_kpis");
     }
 
     function kpi(label, value, suffix) {
         return [
             '<div class="ep-kpi">',
-            '<div class="ep-kpi-label">' + label + '</div>',
-            '<div class="ep-kpi-value">' + value + '</div>',
-            '<div class="ep-kpi-suffix">' + suffix + '</div>',
+            '<div class="ep-kpi-label">' + escapeHtml(label) + '</div>',
+            '<div class="ep-kpi-value">' + escapeHtml(value) + '</div>',
+            '<div class="ep-kpi-suffix">' + escapeHtml(suffix) + '</div>',
             '</div>'
         ].join("");
     }
 
-    function renderTable(bodyId, columns, rows, emptyMsg, monoCols, functionCol) {
+    function renderTable(bodyId, columns, rows, emptyMsg, panelKey) {
         var el = document.getElementById(bodyId);
         if (!el) { return; }
         if (!rows || rows.length === 0) {
-            el.innerHTML = '<div class="ep-state">' + escapeHtml(emptyMsg) + '</div>';
+            setEmpty(bodyId, emptyMsg, panelKey);
             return;
         }
         var header = '<tr>' + columns.map(function (c) {
             return '<th>' + escapeHtml(c.label) + '</th>';
         }).join("") + '</tr>';
+        // Every cell value goes through escapeHtml — defense-in-depth against
+        // hostile agent_id / explanation strings from the wire.
         var body = rows.map(function (row) {
             return '<tr>' + columns.map(function (c) {
                 var cls = "";
-                if (monoCols && monoCols.indexOf(c.field) >= 0) { cls = " class=\"ep-mono\""; }
-                if (functionCol && functionCol === c.field) { cls = " class=\"ep-function\""; }
+                if (c.mono) { cls = ' class="ep-mono"'; }
+                if (c.functionCol) { cls = ' class="ep-function"'; }
                 return '<td' + cls + '>' + escapeHtml(row[c.field] || "") + '</td>';
             }).join("") + '</tr>';
         }).join("");
         el.innerHTML = '<table class="ep-table"><thead>' + header + '</thead><tbody>' + body + '</tbody></table>';
+        setOk(panelKey);
     }
 
     function renderNist(rows) {
         renderTable(
             "ep-nist-body",
             [
-                { field: "function", label: "Function" },
+                { field: "function", label: "Function", functionCol: true },
                 { field: "splunkgate_components", label: "SplunkGate components" },
-                { field: "evidence_query", label: "Evidence SPL" }
+                { field: "evidence_query", label: "Evidence SPL", mono: true }
             ],
             rows,
             "No NIST RMF rows returned.",
-            ["evidence_query"],
-            "function"
+            "nist_rmf"
         );
     }
 
@@ -247,47 +366,36 @@
             ],
             rows,
             "No EU AI Act rows returned.",
-            [],
-            null
+            "eu_article_6"
         );
     }
 
     function renderHipaa(rows) {
-        if (state.jurisdictionalTag !== "HIPAA" && state.jurisdictionalTag !== "ALL") {
-            setEmpty("ep-hipaa-body", "Profile gate excludes HIPAA — select HIPAA or All profiles.");
-            return;
-        }
         renderTable(
             "ep-hipaa-body",
             [
                 { field: "count", label: "PHI hits" },
-                { field: "surface", label: "Surface" },
-                { field: "agent_id", label: "Agent ID" }
+                { field: "surface", label: "Surface", mono: true },
+                { field: "agent_id", label: "Agent ID", mono: true }
             ],
             rows,
             "No PHI verdicts in the selected coverage period.",
-            ["agent_id", "surface"],
-            null
+            "hipaa"
         );
     }
 
     function renderPci(rows) {
-        if (state.jurisdictionalTag !== "PCI" && state.jurisdictionalTag !== "ALL") {
-            setEmpty("ep-pci-body", "Profile gate excludes PCI — select PCI or All profiles.");
-            return;
-        }
         renderTable(
             "ep-pci-body",
             [
                 { field: "count", label: "PCI hits" },
-                { field: "surface", label: "Surface" },
-                { field: "agent_id", label: "Agent ID" },
+                { field: "surface", label: "Surface", mono: true },
+                { field: "agent_id", label: "Agent ID", mono: true },
                 { field: "severity", label: "Severity" }
             ],
             rows,
             "No PCI verdicts in the selected coverage period.",
-            ["agent_id", "surface"],
-            null
+            "pci"
         );
     }
 
@@ -295,57 +403,112 @@
         var r = (rows && rows[0]) || {};
         var gen = document.getElementById("ep-footer-generated");
         if (gen) { gen.textContent = "Generated " + (r.generated || ""); }
+        setOk("footer");
     }
 
+    /* runSearch — cancellable, errback-wired, timeout-bounded.
+     *
+     * Returns nothing; effects flow through onResults / onError. Every call
+     * captures a per-call ctx with `cancelled` flag; a newer call supersedes
+     * by setting the previous ctx.cancelled = true and calling mgr.cancel().
+     * Late-arriving AMD callbacks / data events / search:error events all
+     * check the flag before touching the DOM. */
     function runSearch(id, query, resultsCount, onResults, onError) {
-        var sm = state.searches[id];
-        if (sm && typeof sm.cancel === "function") {
-            sm.cancel();
+        var prev = state.searches[id];
+        if (prev) {
+            prev.cancelled = true;
+            if (prev.mgr && typeof prev.mgr.cancel === "function") {
+                prev.mgr.cancel();
+            }
+            if (prev.timer) { clearTimeout(prev.timer); }
         }
-        require(["splunkjs/mvc/searchmanager"], function (SearchManager) {
-            var search = new SearchManager({
-                id: "splunkgate-ep-" + id + "-" + Date.now(),
-                preview: false,
-                cache: false,
-                search: query,
-                earliest_time: state.earliest,
-                latest_time: state.latest
-            });
-            state.searches[id] = search;
-            search.on("search:error", function (props) {
-                onError(props && props.message ? props.message : "unknown search error");
-            });
-            search.data("results", { count: resultsCount, offset: 0 }).on("data", function (_unused, data) {
-                onResults(data && data.results ? data.results : []);
-            });
-            search.data("results").on("error", function (err) {
-                onError(err && err.message ? err.message : "results stream error");
-            });
-        });
+        var ctx = { cancelled: false, mgr: null, timer: null };
+        state.searches[id] = ctx;
+
+        if (typeof require !== "function") {
+            onError("Splunk runtime not detected (require is undefined)");
+            return;
+        }
+
+        ctx.timer = setTimeout(function () {
+            if (ctx.cancelled) { return; }
+            ctx.cancelled = true;
+            if (ctx.mgr && typeof ctx.mgr.cancel === "function") { ctx.mgr.cancel(); }
+            onError("Search timed out after " + (SEARCH_TIMEOUT_MS / 1000) + "s — no response from Splunk Search SDK");
+        }, SEARCH_TIMEOUT_MS);
+
+        require(
+            ["splunkjs/mvc/searchmanager"],
+            function (SearchManager) {
+                if (ctx.cancelled) { return; }
+                try {
+                    SEARCH_ID_SEQ += 1;
+                    ctx.mgr = new SearchManager({
+                        id: "splunkgate-ep-" + id + "-" + SEARCH_ID_SEQ,
+                        preview: false,
+                        cache: false,
+                        search: query,
+                        earliest_time: state.earliest,
+                        latest_time: state.latest
+                    });
+                } catch (e) {
+                    if (ctx.cancelled) { return; }
+                    ctx.cancelled = true;
+                    if (ctx.timer) { clearTimeout(ctx.timer); }
+                    onError("SearchManager construction failed: " + (e && e.message ? e.message : "unknown error"));
+                    return;
+                }
+                ctx.mgr.on("search:error", function (props) {
+                    if (ctx.cancelled) { return; }
+                    ctx.cancelled = true;
+                    if (ctx.timer) { clearTimeout(ctx.timer); }
+                    onError(props && props.message ? props.message : "Splunk search returned an error (no message)");
+                });
+                ctx.mgr.data("results", { count: resultsCount, offset: 0 }).on("data", function (_unused, data) {
+                    if (ctx.cancelled) { return; }
+                    ctx.cancelled = true;
+                    if (ctx.timer) { clearTimeout(ctx.timer); }
+                    onResults(data && data.results ? data.results : []);
+                });
+            },
+            function (err) {
+                if (ctx.cancelled) { return; }
+                ctx.cancelled = true;
+                if (ctx.timer) { clearTimeout(ctx.timer); }
+                onError(
+                    "Splunk Search SDK failed to load: " +
+                    (err && err.message ? err.message : (err && err.requireType ? err.requireType : "unknown require error"))
+                );
+            }
+        );
     }
 
     function refreshAll() {
-        setLoading("ep-kpis-section");
-        setLoading("ep-nist-body");
-        setLoading("ep-eu-body");
-        setLoading("ep-hipaa-body");
-        setLoading("ep-pci-body");
+        renderJurisdictionBanner();
+        applyProfileVisibility();
 
-        runSearch("header_kpis", QUERIES.header_kpis, 1, renderHeaderKpis, function (e) { setError("ep-kpis-section", e); });
-        runSearch("nist_rmf", QUERIES.nist_rmf, 10, renderNist, function (e) { setError("ep-nist-body", e); });
-        runSearch("eu_article_6", QUERIES.eu_article_6, 10, renderEu, function (e) { setError("ep-eu-body", e); });
+        setLoading("ep-kpis-section", "header_kpis");
+        setLoading("ep-nist-body", "nist_rmf");
+        setLoading("ep-eu-body", "eu_article_6");
 
-        if (state.jurisdictionalTag === "HIPAA" || state.jurisdictionalTag === "ALL") {
-            runSearch("hipaa", QUERIES.hipaa, 18, renderHipaa, function (e) { setError("ep-hipaa-body", e); });
+        runSearch("header_kpis", QUERIES.header_kpis, 1, renderHeaderKpis, function (e) { setError("ep-kpis-section", e, "header_kpis"); });
+        runSearch("nist_rmf", QUERIES.nist_rmf, 10, renderNist, function (e) { setError("ep-nist-body", e, "nist_rmf"); });
+        runSearch("eu_article_6", QUERIES.eu_article_6, 10, renderEu, function (e) { setError("ep-eu-body", e, "eu_article_6"); });
+
+        if (isHipaaActive()) {
+            setLoading("ep-hipaa-body", "hipaa");
+            runSearch("hipaa", QUERIES.hipaa, 18, renderHipaa, function (e) { setError("ep-hipaa-body", e, "hipaa"); });
         } else {
-            renderHipaa([]);
+            state.panelStatus.hipaa = "ok"; // not in scope; treat as resolved.
         }
-        if (state.jurisdictionalTag === "PCI" || state.jurisdictionalTag === "ALL") {
-            runSearch("pci", QUERIES.pci, 50, renderPci, function (e) { setError("ep-pci-body", e); });
+        if (isPciActive()) {
+            setLoading("ep-pci-body", "pci");
+            runSearch("pci", QUERIES.pci, 50, renderPci, function (e) { setError("ep-pci-body", e, "pci"); });
         } else {
-            renderPci([]);
+            state.panelStatus.pci = "ok";
         }
-        runSearch("footer", QUERIES.footer, 1, renderFooter, function () {});
+        runSearch("footer", QUERIES.footer, 1, renderFooter, function () { setOk("footer"); });
+        updateExportGate();
     }
 
     function wireControls() {
@@ -367,7 +530,10 @@
         }
         var btn = document.getElementById("ep-export");
         if (btn) {
-            btn.addEventListener("click", function () { window.print(); });
+            btn.addEventListener("click", function () {
+                if (btn.disabled) { return; }
+                window.print();
+            });
         }
     }
 
@@ -381,11 +547,7 @@
         }
         renderShell(root);
         wireControls();
-        if (typeof require === "function") {
-            refreshAll();
-        } else {
-            setError("ep-kpis-section", "Splunk runtime not detected (require is undefined)");
-        }
+        refreshAll();
     }
 
     if (document.readyState === "loading") {

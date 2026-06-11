@@ -7,6 +7,12 @@
  * toolchain at pack time. This TSX file is what the Phase-2 webpack build
  * will emit once the CI workflow gains a Node lane.
  *
+ * **DRIFT CONTRACT**: when you fix a bug in this file, you MUST fix the
+ * same bug in `static/splunkgate-suit/evidence_pack.js`. The test
+ * `test_drift_invariants_match` enforces shared invariants (SR 26-2 quote,
+ * panel titles, SPL queries, jurisdictional banner copy, error/empty
+ * state markers) but cannot enforce semantic equivalence in full.
+ *
  * SPL data sources lift verbatim from
  * `docs/archive/dashboard-studio-v2/regulator_evidence_pack.xml`.
  */
@@ -19,6 +25,7 @@ import "../styles/tokens.css";
 declare const require: any;
 
 const MOUNT_ID = "splunkgate-evidence-pack";
+const SEARCH_TIMEOUT_MS = 30000;
 
 interface JurisdictionalProfile {
     value: "ALL" | "FSI" | "HIPAA" | "PCI" | "PUBSEC";
@@ -94,6 +101,8 @@ interface SearchManagerInstance {
     };
 }
 
+/* useSplunkSearch — cancellable, errback-wired, timeout-bounded.
+ * Mirrors the runSearch() contract in evidence_pack.js. */
 function useSplunkSearch(
     key: SearchKey,
     query: string,
@@ -112,35 +121,89 @@ function useSplunkSearch(
         setS({ status: "loading", rows: [] });
         let cancelled = false;
         let mgr: SearchManagerInstance | null = null;
-        if (typeof require !== "function") {
-            setS({ status: "error", rows: [], error: "Splunk runtime not detected" });
-            return;
-        }
-        require(["splunkjs/mvc/searchmanager"], (SearchManager: new (cfg: object) => SearchManagerInstance) => {
+        const timer = setTimeout(() => {
             if (cancelled) {
                 return;
             }
-            mgr = new SearchManager({
-                id: `splunkgate-ep-${key}-${Date.now()}`,
-                preview: false,
-                cache: false,
-                search: query,
-                earliest_time: earliest,
-                latest_time: latest,
+            cancelled = true;
+            mgr?.cancel?.();
+            setS({
+                status: "error",
+                rows: [],
+                error: `Search timed out after ${SEARCH_TIMEOUT_MS / 1000}s — no response from Splunk Search SDK`,
             });
-            mgr.on("search:error", (props) => {
-                if (!cancelled) {
-                    setS({ status: "error", rows: [], error: props?.message ?? "unknown search error" });
+        }, SEARCH_TIMEOUT_MS);
+
+        if (typeof require !== "function") {
+            clearTimeout(timer);
+            setS({ status: "error", rows: [], error: "Splunk runtime not detected" });
+            return;
+        }
+        require(
+            ["splunkjs/mvc/searchmanager"],
+            (SearchManager: new (cfg: object) => SearchManagerInstance) => {
+                if (cancelled) {
+                    return;
                 }
-            });
-            mgr.data("results", { count: resultsCount, offset: 0 }).on("data", (_unused, data) => {
-                if (!cancelled) {
+                try {
+                    mgr = new SearchManager({
+                        id: `splunkgate-ep-${key}-${Date.now()}`,
+                        preview: false,
+                        cache: false,
+                        search: query,
+                        earliest_time: earliest,
+                        latest_time: latest,
+                    });
+                } catch (e: unknown) {
+                    if (cancelled) {
+                        return;
+                    }
+                    cancelled = true;
+                    clearTimeout(timer);
+                    setS({
+                        status: "error",
+                        rows: [],
+                        error: `SearchManager construction failed: ${(e as Error).message ?? "unknown error"}`,
+                    });
+                    return;
+                }
+                mgr.on("search:error", (props) => {
+                    if (cancelled) {
+                        return;
+                    }
+                    cancelled = true;
+                    clearTimeout(timer);
+                    setS({
+                        status: "error",
+                        rows: [],
+                        error: props?.message ?? "Splunk search returned an error (no message)",
+                    });
+                });
+                mgr.data("results", { count: resultsCount, offset: 0 }).on("data", (_unused, data) => {
+                    if (cancelled) {
+                        return;
+                    }
+                    cancelled = true;
+                    clearTimeout(timer);
                     setS({ status: "ok", rows: data?.results ?? [] });
+                });
+            },
+            (err: { message?: string; requireType?: string }) => {
+                if (cancelled) {
+                    return;
                 }
-            });
-        });
+                cancelled = true;
+                clearTimeout(timer);
+                setS({
+                    status: "error",
+                    rows: [],
+                    error: `Splunk Search SDK failed to load: ${err?.message ?? err?.requireType ?? "unknown require error"}`,
+                });
+            }
+        );
         return () => {
             cancelled = true;
+            clearTimeout(timer);
             mgr?.cancel?.();
         };
     }, [key, query, earliest, latest, resultsCount, enabled]);
@@ -152,11 +215,30 @@ function timeLabel(earliest: string): string {
     return TIME_PRESETS.find((p) => p.value === earliest)?.label ?? `${earliest} → now`;
 }
 
+function profileLabel(tag: JurisdictionalProfile["value"]): string {
+    return JURISDICTIONAL_PROFILES.find((p) => p.value === tag)?.label ?? tag;
+}
+
+function scopeStatement(tag: JurisdictionalProfile["value"]): string {
+    switch (tag) {
+        case "ALL":
+            return "All in-scope profiles are included in this artifact (FSI / HIPAA / PCI / PUBSEC). Both the HIPAA Safe Harbor 18 and PCI DSS 11.x panels are populated below.";
+        case "HIPAA":
+            return "Scope: HIPAA Safe Harbor 18. The HIPAA panel below is populated; the PCI panel is excluded from this profile and is omitted from the artifact.";
+        case "PCI":
+            return "Scope: PCI DSS 11.x. The PCI panel below is populated; the HIPAA panel is excluded from this profile and is omitted from the artifact.";
+        case "FSI":
+            return "Scope: FSI (FFIEC-AIML / SR 26-2). Neither HIPAA nor PCI panels are in scope for this profile; both are omitted from the artifact.";
+        case "PUBSEC":
+            return "Scope: PUBSEC (NIST AI RMF). Neither HIPAA nor PCI panels are in scope for this profile; both are omitted from the artifact.";
+    }
+}
+
 interface TableColumn {
     field: string;
     label: string;
     mono?: boolean;
-    function?: boolean;
+    functionCol?: boolean;
 }
 
 interface TableProps {
@@ -170,10 +252,15 @@ function Table({ columns, state, emptyMessage }: TableProps): React.ReactElement
         return <div className="ep-state">Loading…</div>;
     }
     if (state.status === "error") {
-        return <div className="ep-state ep-error">Search error: {state.error}</div>;
+        return (
+            <div className="ep-state-error-wrap">
+                <div className="ep-state-error-head">PANEL FAILED TO LOAD</div>
+                <div className="ep-state-error-msg">{state.error}</div>
+            </div>
+        );
     }
     if (!state.rows.length) {
-        return <div className="ep-state">{emptyMessage}</div>;
+        return <div className="ep-state ep-state-empty">{emptyMessage}</div>;
     }
     return (
         <table className="ep-table">
@@ -188,7 +275,7 @@ function Table({ columns, state, emptyMessage }: TableProps): React.ReactElement
                 {state.rows.map((row, i) => (
                     <tr key={i}>
                         {columns.map((c) => {
-                            const cls = c.function ? "ep-function" : c.mono ? "ep-mono" : undefined;
+                            const cls = c.functionCol ? "ep-function" : c.mono ? "ep-mono" : undefined;
                             return (
                                 <td key={c.field} className={cls}>
                                     {row[c.field] ?? ""}
@@ -223,7 +310,14 @@ function HeaderKpis({ state, earliest }: { state: SearchState; earliest: string 
         return <section className="ep-kpis"><div className="ep-state">Loading…</div></section>;
     }
     if (state.status === "error") {
-        return <section className="ep-kpis"><div className="ep-state ep-error">Search error: {state.error}</div></section>;
+        return (
+            <section className="ep-kpis">
+                <div className="ep-state-error-wrap">
+                    <div className="ep-state-error-head">PANEL FAILED TO LOAD</div>
+                    <div className="ep-state-error-msg">{state.error}</div>
+                </div>
+            </section>
+        );
     }
     const r = state.rows[0] ?? {};
     const total = r.total_decisions ?? "0";
@@ -255,6 +349,33 @@ function EvidencePackView(): React.ReactElement {
     const hipaa = useSplunkSearch("hipaa", QUERIES.hipaa, earliest, latest, 18, hipaaEnabled);
     const pci = useSplunkSearch("pci", QUERIES.pci, earliest, latest, 50, pciEnabled);
     const footer = useSplunkSearch("footer", QUERIES.footer, earliest, latest, 1, true);
+
+    // Export PDF is gated on every active panel reaching ok / error terminal
+    // state. Hidden panels (out-of-scope HIPAA/PCI) don't block the gate.
+    const activeStates = [headerKpis, nistRmf, eu, footer];
+    if (hipaaEnabled) {
+        activeStates.push(hipaa);
+    }
+    if (pciEnabled) {
+        activeStates.push(pci);
+    }
+    const loading = activeStates.filter((s) => s.status === "loading" || s.status === "idle").length;
+    const errored = activeStates.filter((s) => s.status === "error").length;
+    const ok = activeStates.filter((s) => s.status === "ok").length;
+    const exportDisabled = loading > 0 || errored > 0;
+    let exportLabel = "Export PDF for examiner record";
+    if (loading > 0) {
+        exportLabel = `Waiting for ${loading} panel${loading === 1 ? "" : "s"}…`;
+    } else if (errored > 0) {
+        exportLabel = `${errored} panel${errored === 1 ? "" : "s"} failed — fix before export`;
+    }
+    let statusLine = `Panel status: ${ok} OK`;
+    if (errored > 0) {
+        statusLine = `Panel status: ${ok} OK / ${errored} errored`;
+    }
+    if (loading > 0) {
+        statusLine = `Panel status: ${ok} OK / ${errored} errored / ${loading} loading`;
+    }
 
     return (
         <div className="splunkgate-suit">
@@ -292,11 +413,26 @@ function EvidencePackView(): React.ReactElement {
                                 ))}
                             </select>
                         </div>
-                        <button type="button" className="ep-export-btn" onClick={() => window.print()}>
-                            Export PDF for examiner record
+                        <button
+                            type="button"
+                            className="ep-export-btn"
+                            onClick={() => {
+                                if (!exportDisabled) {
+                                    window.print();
+                                }
+                            }}
+                            disabled={exportDisabled}
+                        >
+                            {exportLabel}
                         </button>
                     </div>
                 </header>
+
+                <div className="ep-jurisdiction-banner">
+                    <div className="ep-banner-label">Coverage profile</div>
+                    <div className="ep-banner-value">{profileLabel(jurisdictionalTag)}</div>
+                    <div className="ep-banner-scope">{scopeStatement(jurisdictionalTag)}</div>
+                </div>
 
                 <HeaderKpis state={headerKpis} earliest={earliest} />
 
@@ -310,7 +446,7 @@ function EvidencePackView(): React.ReactElement {
                         </p>
                         <Table
                             columns={[
-                                { field: "function", label: "Function", function: true },
+                                { field: "function", label: "Function", functionCol: true },
                                 { field: "splunkgate_components", label: "SplunkGate components" },
                                 { field: "evidence_query", label: "Evidence SPL", mono: true },
                             ]}
@@ -350,13 +486,12 @@ function EvidencePackView(): React.ReactElement {
                     />
                 </div>
 
-                <div className="ep-panel">
-                    <h2>HIPAA Safe Harbor 18 — PHI detection counts</h2>
-                    <p className="ep-panel-desc">
-                        Conditional on Jurisdictional profile being HIPAA or ALL. An empty table means EITHER no PHI
-                        verdicts in the window OR the current profile gate excluded this panel.
-                    </p>
-                    {hipaaEnabled ? (
+                {hipaaEnabled && (
+                    <div className="ep-panel ep-gated">
+                        <h2>HIPAA Safe Harbor 18 — PHI detection counts</h2>
+                        <p className="ep-panel-desc">
+                            PHI detection counts grouped by surface and agent for the coverage window.
+                        </p>
                         <Table
                             columns={[
                                 { field: "count", label: "PHI hits" },
@@ -366,18 +501,16 @@ function EvidencePackView(): React.ReactElement {
                             state={hipaa}
                             emptyMessage="No PHI verdicts in the selected coverage period."
                         />
-                    ) : (
-                        <div className="ep-state">Profile gate excludes HIPAA — select HIPAA or All profiles.</div>
-                    )}
-                </div>
+                    </div>
+                )}
 
-                <div className="ep-panel">
-                    <h2>PCI DSS 11.x — PCI detection counts</h2>
-                    <p className="ep-panel-desc">
-                        Conditional on Jurisdictional profile being PCI or ALL. Supports PCI-DSS 4.0 11.x sub-requirements
-                        via the persisted KV-store retention of PCI-tagged trace_ids.
-                    </p>
-                    {pciEnabled ? (
+                {pciEnabled && (
+                    <div className="ep-panel ep-gated">
+                        <h2>PCI DSS 11.x — PCI detection counts</h2>
+                        <p className="ep-panel-desc">
+                            PCI detection counts grouped by surface, agent, and severity. Supports PCI-DSS 4.0 11.x
+                            sub-requirements via the persisted KV-store retention of PCI-tagged trace_ids.
+                        </p>
                         <Table
                             columns={[
                                 { field: "count", label: "PCI hits" },
@@ -388,14 +521,13 @@ function EvidencePackView(): React.ReactElement {
                             state={pci}
                             emptyMessage="No PCI verdicts in the selected coverage period."
                         />
-                    ) : (
-                        <div className="ep-state">Profile gate excludes PCI — select PCI or All profiles.</div>
-                    )}
-                </div>
+                    </div>
+                )}
 
                 <footer className="ep-footer">
                     <span>SplunkGate v1.0.0</span>
                     <span>{timeLabel(earliest)}</span>
+                    <span>{statusLine}</span>
                     <span>Generated {footer.rows[0]?.generated ?? ""}</span>
                 </footer>
             </div>
