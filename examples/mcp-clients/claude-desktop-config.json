@@ -1,0 +1,70 @@
+{
+  "_comment": [
+    "SplunkGate + Splunk MCP Server coexistence example for Claude Desktop.",
+    "",
+    "This config tells Claude Desktop to run BOTH MCP servers in the same",
+    "session — so a single agent has BOTH a safety-judgment surface AND a",
+    "Splunk-data-query surface in its tool list.",
+    "",
+    "Surfaces:",
+    "  - splunk-mcp-server      — official Splunkbase app 7931, by Splunk LLC",
+    "                              13,990+ downloads as of 2026-06-05.",
+    "                              Exposes: splunk_run_query, splunk_search,",
+    "                              splunk_get_indexes, etc.  When SAIA is",
+    "                              co-installed: generate_spl, explain_spl,",
+    "                              optimize_spl, ask_splunk_question.",
+    "                              Auth: token-based per the official docs",
+    "                              (OAuth is in Controlled Availability).",
+    "",
+    "  - splunkgate-mcp         — this repo's MCP server. Exposes 4",
+    "                              agent-safety tools (NOT data-query):",
+    "                                splunkgate_score_prompt_injection",
+    "                                splunkgate_judge_tool_call",
+    "                                splunkgate_check_output_leak",
+    "                                splunkgate_audit_trace",
+    "                              Runs locally via stdio transport.",
+    "",
+    "Workflow this enables:",
+    "  agent thinks 'I should search Splunk for X' →",
+    "    agent calls splunkgate_score_prompt_injection on the user's text →",
+    "    if ALLOW: agent calls splunk_run_query →",
+    "    agent gets results →",
+    "    agent calls splunkgate_check_output_leak on the response →",
+    "    if ALLOW: agent surfaces to the user.",
+    "",
+    "Single Claude session, single tool list, two MCP servers, real safety",
+    "checks layered on top of real Splunk data access. No proxy, no fork,",
+    "no rebuild — just coexistence via standard MCP client config.",
+    "",
+    "Installation steps:",
+    "  1. macOS install location for this file:",
+    "       ~/Library/Application Support/Claude/claude_desktop_config.json",
+    "  2. Replace YOUR_SPLUNK_HOST + YOUR_SPLUNK_TOKEN with your tenant values.",
+    "  3. Restart Claude Desktop. Both servers appear in the tool picker.",
+    "",
+    "For Cursor or other MCP clients, the same servers block transfers verbatim",
+    "into that client's config file (Cursor: ~/.cursor/mcp.json)."
+  ],
+  "mcpServers": {
+    "splunk-mcp-server": {
+      "command": "python",
+      "args": ["-m", "splunk_mcp_server"],
+      "env": {
+        "SPLUNK_HOST": "YOUR_SPLUNK_HOST",
+        "SPLUNK_PORT": "8089",
+        "SPLUNK_TOKEN": "YOUR_SPLUNK_TOKEN",
+        "_comment": "Per https://help.splunk.com/.../configure-the-splunk-mcp-server — token must come from a role with the mcp_tool_execute capability."
+      }
+    },
+    "splunkgate-mcp": {
+      "command": "python",
+      "args": ["-m", "splunkgate_mcp"],
+      "env": {
+        "SPLUNKGATE_AI_DEFENSE_MOCK": "true",
+        "SPLUNKGATE_EXPLAINER_BACKEND": "ollama",
+        "OLLAMA_HOST": "http://localhost:11434",
+        "_comment": "MOCK=true uses canned AI Defense responses; flip to false + set SPLUNKGATE_AI_DEFENSE_API_KEY for live calls. explainer_backend=ollama uses the local Hosted Model (default gpt-oss:20b) for verdict explanations — see scripts/setup_hosted_models.sh."
+      }
+    }
+  }
+}

@@ -13,6 +13,20 @@ Every verdict lands as an auditable record in the Splunk stack your SOC already 
 
 ---
 
+## Splunk capabilities this project leverages
+
+SplunkGate targets the **Security** track + **three bonus prizes** by using
+four of the five capabilities the hackathon resources highlight:
+
+| Capability | How SplunkGate uses it | Bonus prize axis |
+|---|---|---|
+| **Splunk Python SDK / AI for Splunk Apps** | Surface 1 middleware wraps `splunklib.ai` agents at the tool / subagent / model / agent boundaries. | Developer Tools |
+| **Splunk MCP Server** | Coexistence with Splunkbase app 7931 — SplunkGate ships its own MCP server (4 safety tools) alongside Splunk's data-query server. See `examples/mcp-clients/claude-desktop-config.json`. | MCP Server |
+| **Splunk Hosted Models** | Real LLM inference for verdict explanations via Ollama-served Hosted Models. Default model: `gpt-oss:20b` (Apache-2.0). `foundation-sec:8b` is a one-flag swap once a Modelfile is built. See `scripts/setup_hosted_models.sh` and ADR-003a. | Hosted Models |
+| **Splunk Developer Tools (AppInspect)** | The Splunk app passes AppInspect cleanly on every CI run. Build artifact is byte-deterministic across machines. | Developer Tools |
+
+---
+
 ## Three questions, answered in real time
 
 Every agent request passes through three checkpoints before the agent acts:

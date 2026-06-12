@@ -6,9 +6,20 @@ call. Fields default to safe-for-demo values; production deployments must
 set `ai_defense_api_key` via env var or kwarg.
 """
 
+from typing import Literal
+
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
-__all__ = ["Config"]
+__all__ = ["Config", "ExplainerBackend"]
+
+# The four valid explainer routings. Default is "template" — pure-Python,
+# zero dependencies, deterministic — which makes every test predictable
+# and lets the middleware ship without Ollama installed. Operators flip
+# to "ollama" once they have a Hosted Model running locally (or in a
+# remote inference host reachable at ``OLLAMA_HOST``). "ai_spl" is the
+# Splunk-native ``| ai`` SPL path documented in ADR-003a; it remains
+# mock-default until a tenant confirms Splunk Hosted Models access.
+ExplainerBackend = Literal["template", "ollama", "ai_spl"]
 
 
 class Config(BaseModel):
@@ -26,7 +37,36 @@ class Config(BaseModel):
     )
     foundation_sec_enabled: bool = Field(
         default=True,
-        description="Whether to call the Foundation-Sec explainer via | ai SPL.",
+        description=(
+            "Whether to populate Verdict.explanation with an explainer-generated "
+            "string. False = leave explanation=None. True + explainer_backend "
+            "selects the transport."
+        ),
+    )
+    explainer_backend: ExplainerBackend = Field(
+        default="template",
+        description=(
+            'Explainer transport. "template" = deterministic Python template '
+            '(default, zero deps). "ollama" = real Hosted Model via local '
+            "Ollama HTTP API (gpt-oss:20b by default; foundation-sec:8b once "
+            'a Modelfile is created). "ai_spl" = Splunk Hosted Models via '
+            "the ``| ai`` SPL command (ADR-003a Transport A; mock-default)."
+        ),
+    )
+    explainer_model: str = Field(
+        default="gpt-oss:20b",
+        description=(
+            'Hosted Model tag passed to Ollama when explainer_backend="ollama". '
+            "Defaults to OpenAI's open-weight gpt-oss-20b (Apache-2.0, in the "
+            "Ollama library out-of-the-box)."
+        ),
+    )
+    explainer_ollama_url: str | None = Field(
+        default=None,
+        description=(
+            "Ollama base URL when explainer_backend=ollama. None falls through "
+            "to the ``OLLAMA_HOST`` env var, then to ``http://localhost:11434``."
+        ),
     )
     escalate_on_first_pass_hit: bool = Field(
         default=True,
