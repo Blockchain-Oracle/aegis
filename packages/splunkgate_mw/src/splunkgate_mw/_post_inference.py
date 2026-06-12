@@ -2,10 +2,17 @@
 
 Runs Cisco AI Defense against the LLM's output text + the rule subset that
 focuses on regulated-data exposure: PII / PHI / PCI / Code Detection. On
-non-ALLOW verdict, the helper optionally attaches a WHY-string via
-`splunkgate_judges.explainer.explain_verdict` (gated on `config.foundation_sec_enabled`
-— per ADR-013 the explainer is the v1 template; the Foundation-Sec swap
-happens behind the same call site).
+non-ALLOW verdict, the helper optionally attaches a WHY-string via the
+explainer backend selected in ``config.explainer_backend``:
+
+- ``"template"`` (default) — deterministic Python template at
+  ``splunkgate_judges.explainer.explain_verdict``. Zero deps; safe for CI.
+- ``"ollama"`` — REAL Hosted Model call via
+  ``splunkgate_judges.hosted_models.explain_via_hosted_model`` (default
+  model: ``gpt-oss:20b``). Falls back to the template on any HTTP failure.
+- ``"ai_spl"`` — Splunk-native ``| ai`` SPL invocation
+  (``foundsec_spl.explain_via_ai_spl``). Mock-default until a tenant
+  confirms Splunk Hosted Models access (per ADR-003a).
 
 Surface = `mw_model` (same as pre-scan; both are model-boundary events).
 """
@@ -17,6 +24,7 @@ from uuid import UUID, uuid4
 import structlog
 from splunkgate_core.verdict import RuleHit, Severity, Verdict, VerdictLabel
 from splunkgate_judges.explainer import explain_verdict
+from splunkgate_judges.hosted_models import explain_via_hosted_model
 
 from splunkgate_mw.config import Config
 from splunkgate_mw.profiles import Profile
@@ -134,7 +142,25 @@ async def post_inference_scan(
     )
 
     if config.foundation_sec_enabled:
-        verdict = verdict.model_copy(update={"explanation": explain_verdict(verdict)})
+        backend = config.explainer_backend
+        if backend == "ollama":
+            # REAL Hosted Model call. Falls back to the template internally
+            # on any HTTP failure — verdict.explanation always populated.
+            explanation = explain_via_hosted_model(
+                verdict,
+                model=config.explainer_model,
+                ollama_url=config.explainer_ollama_url,
+            )
+        elif backend == "ai_spl":
+            # ``| ai`` SPL path — lives in foundsec_spl.py. Deferred import
+            # so splunklib is optional for non-ai-spl deployments.
+            from splunkgate_judges.foundsec_spl import explain_via_ai_spl  # noqa: PLC0415
+
+            explanation = explain_via_ai_spl(verdict)
+        else:
+            # "template" — deterministic, the v1 default.
+            explanation = explain_verdict(verdict)
+        verdict = verdict.model_copy(update={"explanation": explanation})
 
     _logger.debug(
         "post_inference.verdict",
@@ -143,6 +169,7 @@ async def post_inference_scan(
         severity=severity.value,
         rule_count=len(rules),
         explanation_set=verdict.explanation is not None,
+        explainer_backend=config.explainer_backend if config.foundation_sec_enabled else "disabled",
         profile=profile.name,
     )
 
